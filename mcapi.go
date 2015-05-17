@@ -1,0 +1,298 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"github.com/andrewtian/minepong"
+	"github.com/garyburd/redigo/redis"
+	"github.com/gin-gonic/gin"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+)
+
+type Config struct {
+	HttpAppHost   string
+	RedisPath     string
+	RedisDatabase string
+	StaticFiles   string
+	TemplateFiles string
+}
+
+type ServerStatusPlayers struct {
+	Max int `json:"max"`
+	Now int `json:"now"`
+}
+
+type ServerStatusServer struct {
+	Name     string `json:"name"`
+	Protocol int    `json:"protocol"`
+}
+
+type ServerStatus struct {
+	Status      string              `json:"status"`
+	Online      bool                `json:"online"`
+	Motd        string              `json:"motd"`
+	Error       string              `json:"error"`
+	Players     ServerStatusPlayers `json:"players"`
+	Server      ServerStatusServer  `json:"server"`
+	LastOnline  string              `json:"last_online"`
+	LastUpdated string              `json:"last_updated"`
+}
+
+var redisPool *redis.Pool
+
+func newRedisPool(server string, database string) *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("unix", server)
+			if err != nil {
+				return nil, err
+			}
+
+			if _, err := c.Do("SELECT", database); err != nil {
+				c.Close()
+				return nil, err
+			}
+
+			return c, err
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+
+			return err
+		},
+	}
+}
+
+func loadConfig(path string) *Config {
+	file, e := ioutil.ReadFile(path)
+
+	if e != nil {
+		fmt.Println("Error loading configuration file!")
+		os.Exit(1)
+	}
+
+	var cfg Config
+	json.Unmarshal(file, &cfg)
+
+	return &cfg
+}
+
+func updateHost(serverAddr string) (bool, *ServerStatus) {
+	r := redisPool.Get()
+	defer r.Close()
+
+	var online bool
+	var veryOld bool
+	var status *ServerStatus
+
+	online = true
+	veryOld = false
+
+	r.Do("SADD", "servers", serverAddr)
+
+	resp, err := redis.String(r.Do("GET", serverAddr))
+	if err != nil {
+		status = &ServerStatus{}
+	} else {
+		json.Unmarshal([]byte(resp), &status)
+	}
+
+	status.Error = ""
+
+	var conn net.Conn
+	if online {
+		conn, err = net.Dial("tcp", serverAddr)
+		if err != nil {
+			online = false
+			status.Status = "success"
+			status.Online = false
+			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+		}
+	}
+
+	var pong *minepong.Pong
+	if online {
+		pong, err = minepong.Ping(conn, serverAddr)
+		if err != nil {
+			online = false
+			status.Status = "success"
+			status.Online = false
+			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+		}
+	}
+
+	if online {
+		status.Status = "success"
+		status.Online = true
+		status.Motd = pong.Description.(string)
+		status.Players.Max = pong.Players.Max
+		status.Players.Now = pong.Players.Online
+		status.Server.Name = pong.Version.Name
+		status.Server.Protocol = pong.Version.Protocol
+		status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+		status.LastOnline = strconv.FormatInt(time.Now().Unix(), 10)
+	} else {
+		i, err := strconv.ParseInt(status.LastOnline, 10, 64)
+		if err != nil {
+			i = time.Now().Unix()
+		}
+
+		if time.Unix(i, 0).Add(24 * time.Hour).Before(time.Now()) {
+			veryOld = true
+			fmt.Printf("Very old server %s in database\n", serverAddr)
+		}
+	}
+
+	data, err := json.Marshal(status)
+	if err != nil {
+		status.Status = "error"
+		status.Error = "internal server error (unable to jsonify server status)"
+	}
+
+	_, err = r.Do("SET", serverAddr, data)
+	if err != nil {
+		status.Status = "error"
+		status.Error = "internal server error (unable to save json to redis)"
+	}
+
+	return veryOld, status
+}
+
+func updateServers() {
+	r := redisPool.Get()
+	defer r.Close()
+
+	servers, err := redis.Strings(r.Do("SMEMBERS", "servers"))
+	if err != nil {
+		fmt.Println("Unable to get saved servers!")
+	}
+
+	fmt.Printf("%d servers in database\n", len(servers))
+
+	for _, server := range servers {
+		isOld, _ := updateHost(server)
+
+		if isOld {
+			fmt.Printf("Removing old server %s\n", server)
+			r.Do("SREM", "servers", server)
+		}
+	}
+}
+
+func getServerStatusFromRedis(serverAddr string) *ServerStatus {
+	r := redisPool.Get()
+	defer r.Close()
+
+	resp, err := redis.String(r.Do("GET", serverAddr))
+	if err != nil {
+		_, status := updateHost(serverAddr)
+
+		return status
+	}
+
+	var status ServerStatus
+	err = json.Unmarshal([]byte(resp), &status)
+	if err != nil {
+		return &ServerStatus{
+			Status: "error",
+			Error:  "internal server error (error loading json from redis)",
+		}
+	}
+
+	return &status
+}
+
+func respondServerStatus(c *gin.Context) {
+	c.Request.ParseForm()
+
+	var serverAddr string
+
+	ip := c.Request.Form.Get("ip")
+	port := c.Request.Form.Get("port")
+
+	if ip == "" {
+		c.JSON(http.StatusBadRequest, &ServerStatus{
+			Online: false,
+			Status: "error",
+			Error:  "missing data",
+		})
+		return
+	}
+
+	if port == "" {
+		serverAddr = ip + ":25565"
+	} else {
+		serverAddr = ip + ":" + port
+	}
+
+	c.JSON(http.StatusOK, getServerStatusFromRedis(serverAddr))
+}
+
+func main() {
+	configFile := flag.String("config", "config.json", "path to configuration file")
+	cfg := loadConfig(*configFile)
+
+	redisPool = newRedisPool(cfg.RedisPath, cfg.RedisDatabase)
+
+	fmt.Println("Updating saved servers")
+	go updateServers()
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+
+		for _ = range t.C {
+			fmt.Println("Updating saved servers")
+			updateServers()
+		}
+	}()
+
+	router := gin.Default()
+
+	router.Static("/scripts", cfg.StaticFiles)
+	router.LoadHTMLGlob(cfg.TemplateFiles)
+
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
+
+		r := redisPool.Get()
+		defer r.Close()
+
+		r.Do("INCR", "mcapi")
+
+		c.Next()
+	})
+
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", gin.H{})
+	})
+
+	router.GET("/hi", func(c *gin.Context) {
+		c.String(http.StatusOK, "Hello :3")
+	})
+
+	router.GET("/stats", func(c *gin.Context) {
+		r := redisPool.Get()
+		defer r.Close()
+
+		stats, _ := redis.Int64(r.Do("GET", "mcapi"))
+
+		c.JSON(http.StatusOK, gin.H{
+			"stats": stats,
+		})
+	})
+
+	router.GET("/server/status", respondServerStatus)
+	router.GET("/minecraft/1.3/server/status", respondServerStatus)
+
+	router.Run(cfg.HttpAppHost)
+}
