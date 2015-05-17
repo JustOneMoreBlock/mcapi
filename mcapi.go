@@ -139,6 +139,7 @@ func updateHost(serverAddr string) (bool, *ServerStatus) {
 		status.Server.Protocol = pong.Version.Protocol
 		status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 		status.LastOnline = strconv.FormatInt(time.Now().Unix(), 10)
+		status.Error = ""
 	} else {
 		i, err := strconv.ParseInt(status.LastOnline, 10, 64)
 		if err != nil {
@@ -238,6 +239,8 @@ func respondServerStatus(c *gin.Context) {
 
 func main() {
 	configFile := flag.String("config", "config.json", "path to configuration file")
+	flag.Parse()
+
 	cfg := loadConfig(*configFile)
 
 	redisPool = newRedisPool(cfg.RedisPath, cfg.RedisDatabase)
@@ -253,7 +256,8 @@ func main() {
 		}
 	}()
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLGlob(cfg.TemplateFiles)
