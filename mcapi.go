@@ -3,14 +3,13 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"github.com/andrewtian/minepong"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 )
@@ -75,8 +74,7 @@ func loadConfig(path string) *Config {
 	file, e := ioutil.ReadFile(path)
 
 	if e != nil {
-		fmt.Println("Error loading configuration file!")
-		os.Exit(1)
+		log.Fatal("Error loading configuration file!")
 	}
 
 	var cfg Config
@@ -85,7 +83,7 @@ func loadConfig(path string) *Config {
 	return &cfg
 }
 
-func updateHost(serverAddr string) (bool, *ServerStatus) {
+func updateHost(serverAddr string) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
 
@@ -95,6 +93,8 @@ func updateHost(serverAddr string) (bool, *ServerStatus) {
 
 	online = true
 	veryOld = false
+
+	log.Printf("Fetching status of server %s\n", serverAddr)
 
 	r.Do("SADD", "servers", serverAddr)
 
@@ -132,7 +132,18 @@ func updateHost(serverAddr string) (bool, *ServerStatus) {
 	if online {
 		status.Status = "success"
 		status.Online = true
-		status.Motd = pong.Description.(string)
+		switch desc := pong.Description.(type) {
+		case string:
+			status.Motd = desc
+		case map[string]interface{}:
+			if val, ok := desc["text"]; ok {
+				status.Motd = val.(string)
+			}
+		default:
+			log.Printf("strange motd on server %s\n", serverAddr)
+			log.Printf("%v", pong.Description)
+			status.Motd = ""
+		}
 		status.Players.Max = pong.Players.Max
 		status.Players.Now = pong.Players.Online
 		status.Server.Name = pong.Version.Name
@@ -148,7 +159,7 @@ func updateHost(serverAddr string) (bool, *ServerStatus) {
 
 		if time.Unix(i, 0).Add(24 * time.Hour).Before(time.Now()) {
 			veryOld = true
-			fmt.Printf("Very old server %s in database\n", serverAddr)
+			log.Printf("Very old server %s in database\n", serverAddr)
 		}
 	}
 
@@ -164,7 +175,11 @@ func updateHost(serverAddr string) (bool, *ServerStatus) {
 		status.Error = "internal server error (unable to save json to redis)"
 	}
 
-	return veryOld, status
+	if veryOld {
+		r.Do("SREM", "servers", serverAddr)
+	}
+
+	return status
 }
 
 func updateServers() {
@@ -173,18 +188,13 @@ func updateServers() {
 
 	servers, err := redis.Strings(r.Do("SMEMBERS", "servers"))
 	if err != nil {
-		fmt.Println("Unable to get saved servers!")
+		log.Println("Unable to get saved servers!")
 	}
 
-	fmt.Printf("%d servers in database\n", len(servers))
+	log.Printf("%d servers in database\n", len(servers))
 
 	for _, server := range servers {
-		isOld, _ := updateHost(server)
-
-		if isOld {
-			fmt.Printf("Removing old server %s\n", server)
-			r.Do("SREM", "servers", server)
-		}
+		go updateHost(server)
 	}
 }
 
@@ -194,7 +204,7 @@ func getServerStatusFromRedis(serverAddr string) *ServerStatus {
 
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
-		_, status := updateHost(serverAddr)
+		status := updateHost(serverAddr)
 
 		return status
 	}
@@ -245,13 +255,13 @@ func main() {
 
 	redisPool = newRedisPool(cfg.RedisPath, cfg.RedisDatabase)
 
-	fmt.Println("Updating saved servers")
+	log.Println("Updating saved servers")
 	go updateServers()
 	go func() {
 		t := time.NewTicker(5 * time.Minute)
 
 		for _ = range t.C {
-			fmt.Println("Updating saved servers")
+			log.Println("Updating saved servers")
 			updateServers()
 		}
 	}()
