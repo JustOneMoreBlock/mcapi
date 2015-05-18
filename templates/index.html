@@ -46,7 +46,9 @@
     <div class="container">
       <div class="navbar-header">
         <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target=".collapse">
-
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
         </button>
 
         <a class="navbar-brand" href="/">Minecraft API</a>
@@ -117,6 +119,76 @@
         </p>
 
         <p>
+          A response from this might look the following (live response data):
+
+          <pre><code class="json" id="live-server-response"></code></pre>
+        </p>
+
+        <p>
+          <table class="table">
+            <thead>
+              <tr>
+                <th width="10%">name</th>
+                <th>description</th>
+                <th width="15%">example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>status</td>
+                <td>the status of the request, typically success unless a poor request is made or my server is having internal troubles. if this is not success, assume the data is bad and should not be used.</td>
+                <td>success</td>
+              </tr>
+              <tr>
+                <td>online</td>
+                <td>if the server is online or not</td>
+                <td>true</td>
+              </tr>
+              <tr>
+                <td>motd</td>
+                <td>the server description, also known as the message of the day. some strange formatting may be in this, there are various libraries available for formatting this.</td>
+                <td>My Minecraft server</td>
+              </tr>
+              <tr>
+                <td>error</td>
+                <td>error message from the request. if you forget the IP the error will be <code>missing data</code>. if it is an invalid IP, the error will be <code>invalid hostname or port</code>. if an error starts with <code>internal server error</code>, it means something is wrong with my server. empty means no error.
+                <td></td>
+              </tr>
+              <tr>
+                <td>players.max</td>
+                <td>number of players that the server will allow</td>
+                <td>20</td>
+              </tr>
+              <tr>
+                <td>players.now</td>
+                <td>number of players currently online</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>server.name</td>
+                <td>current server version name</td>
+                <td>Spigot 1.8.3</td>
+              </tr>
+              <tr> 
+                <td>server.protocol</td>
+                <td>server version protocol</td>
+                <td>47</td>
+              </tr>
+              <tr>
+                <td>last_online</td>
+                <td>the date the server was last recorded online. if empty, it has never been online. it is a unix timestamp in string form. if this has the same value as <code>last_updated</code>, it means that it is currently online.</td>
+                <td>1431985691</td>
+              </tr>
+              <tr>
+                <td>last_updated</td>
+                <td>the date the status of the server was last updated at. it updates every five minutes, so you may send requests as soon as it has expired.</td>
+                <td>1431985691</td>
+              </tr>
+            </tbody>
+          </table>
+        </p>
+
+        <p>
           If something doesn't work, you're interested in a new feature, or otherwise need help with it, mention me on <a href="https://twitter.com/Syfaro">Twitter</a> or <a href="mailto:fox@syfaro.net">send me an email</a>!
         </p>
       </div>
@@ -156,7 +228,18 @@
       });
     };
 
+    var loadMyServer = function () {
+      syf.get('/server/status?ip=mc.syfaro.net').then(function (resp) {
+        document.querySelector('#live-server-response').innerHTML = JSON.stringify(resp, null, '  ');
+
+        $('pre code').each(function (i, block) {
+          hljs.highlightBlock(block);
+        });
+      });
+    };
+
     loadStats();
+    loadMyServer();
   }());
   </script>
 </body>
