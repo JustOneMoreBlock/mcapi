@@ -10,7 +10,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -83,6 +85,20 @@ func loadConfig(path string) *Config {
 	return &cfg
 }
 
+func generateConfig(path string) {
+	cfg := &Config{
+		HttpAppHost:   ":8080",
+		RedisPath:     "/tmp/redis.sock",
+		RedisDatabase: "0",
+		StaticFiles:   "./scripts",
+		TemplateFiles: "./templates/*",
+	}
+
+	data, _ := json.MarshalIndent(cfg, "", "	")
+
+	ioutil.WriteFile(path, data, 0644)
+}
+
 func updateHost(serverAddr string) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
@@ -95,8 +111,6 @@ func updateHost(serverAddr string) *ServerStatus {
 	veryOld = false
 
 	log.Printf("Fetching status of server %s\n", serverAddr)
-
-	r.Do("SADD", "servers", serverAddr)
 
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
@@ -111,12 +125,22 @@ func updateHost(serverAddr string) *ServerStatus {
 	if online {
 		conn, err = net.Dial("tcp", serverAddr)
 		if err != nil {
+			if strings.Contains(err.Error(), "no such host") {
+				status.Status = "error"
+				status.Error = "invalid hostname or port"
+				status.Online = false
+
+				return status
+			}
+
 			online = false
 			status.Status = "success"
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 		}
 	}
+
+	r.Do("SADD", "servers", serverAddr)
 
 	var pong *minepong.Pong
 	if online {
@@ -249,7 +273,15 @@ func respondServerStatus(c *gin.Context) {
 
 func main() {
 	configFile := flag.String("config", "config.json", "path to configuration file")
+	genConfig := flag.Bool("gencfg", false, "generate configuration file with sane defaults")
+
 	flag.Parse()
+
+	if *genConfig {
+		generateConfig(*configFile)
+		log.Println("Saved configuration file with sane defaults, please update as needed")
+		os.Exit(0)
+	}
 
 	cfg := loadConfig(*configFile)
 
