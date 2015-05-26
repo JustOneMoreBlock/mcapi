@@ -99,7 +99,7 @@ func generateConfig(path string) {
 	ioutil.WriteFile(path, data, 0644)
 }
 
-func updateHost(serverAddr string) *ServerStatus {
+func updateHost(serverAddr string, debug bool) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
 
@@ -109,8 +109,6 @@ func updateHost(serverAddr string) *ServerStatus {
 
 	online = true
 	veryOld = false
-
-	log.Printf("Fetching status of server %s\n", serverAddr)
 
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
@@ -125,13 +123,20 @@ func updateHost(serverAddr string) *ServerStatus {
 	if online {
 		conn, err = net.Dial("tcp", serverAddr)
 		if err != nil {
-			if strings.Contains(err.Error(), "no such host") {
+			if strings.Contains(err.Error(), "no such host") || strings.Contains(err.Error(), "no route") || strings.Contains(err.Error(), "unknown port") || strings.Contains(err.Error(), "too many colons in address") || strings.Contains(err.Error(), "invalid argument") {
+				log.Printf("Bad server requested: %s\n", serverAddr)
+
+				r.Do("SREM", "servers", serverAddr)
+				r.Do("DEL", serverAddr)
+
 				status.Status = "error"
 				status.Error = "invalid hostname or port"
 				status.Online = false
 
 				return status
 			}
+
+			log.Printf("Server is offline: %s, %v\n", serverAddr, err)
 
 			online = false
 			status.Status = "success"
@@ -146,6 +151,8 @@ func updateHost(serverAddr string) *ServerStatus {
 	if online {
 		pong, err = minepong.Ping(conn, serverAddr)
 		if err != nil {
+			log.Printf("Server does not respond to ping: %s, %v", serverAddr, err)
+
 			online = false
 			status.Status = "success"
 			status.Online = false
@@ -199,8 +206,9 @@ func updateHost(serverAddr string) *ServerStatus {
 		status.Error = "internal server error (unable to save json to redis)"
 	}
 
-	if veryOld {
+	if veryOld || status.LastOnline == "" {
 		r.Do("SREM", "servers", serverAddr)
+		r.Do("DEL", serverAddr)
 	}
 
 	return status
@@ -218,17 +226,21 @@ func updateServers() {
 	log.Printf("%d servers in database\n", len(servers))
 
 	for _, server := range servers {
-		go updateHost(server)
+		go updateHost(server, false)
 	}
 }
 
-func getServerStatusFromRedis(serverAddr string) *ServerStatus {
+func getServerStatusFromRedis(serverAddr string, debug bool) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
 
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
-		status := updateHost(serverAddr)
+		if debug {
+			log.Printf("Could not get value from cache for %s\n", serverAddr)
+		}
+
+		status := updateHost(serverAddr, debug)
 
 		return status
 	}
@@ -236,10 +248,18 @@ func getServerStatusFromRedis(serverAddr string) *ServerStatus {
 	var status ServerStatus
 	err = json.Unmarshal([]byte(resp), &status)
 	if err != nil {
+		if debug {
+			log.Printf("Unable to parse response from cache for %s\n", serverAddr)
+		}
+
 		return &ServerStatus{
 			Status: "error",
 			Error:  "internal server error (error loading json from redis)",
 		}
+	}
+
+	if debug {
+		log.Printf("Returned stats for server %s\n", serverAddr)
 	}
 
 	return &status
@@ -252,8 +272,15 @@ func respondServerStatus(c *gin.Context) {
 
 	ip := c.Request.Form.Get("ip")
 	port := c.Request.Form.Get("port")
+	debug := c.Request.Form.Get("debug")
+
+	checkDebug, _ := strconv.ParseBool(debug)
 
 	if ip == "" {
+		if checkDebug {
+			log.Printf("Server request had missing IP\n")
+		}
+
 		c.JSON(http.StatusBadRequest, &ServerStatus{
 			Online: false,
 			Status: "error",
@@ -268,7 +295,11 @@ func respondServerStatus(c *gin.Context) {
 		serverAddr = ip + ":" + port
 	}
 
-	c.JSON(http.StatusOK, getServerStatusFromRedis(serverAddr))
+	if checkDebug {
+		log.Printf("Got server request for %s\n", serverAddr)
+	}
+
+	c.JSON(http.StatusOK, getServerStatusFromRedis(serverAddr, checkDebug))
 }
 
 func main() {
