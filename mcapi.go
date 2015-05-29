@@ -6,6 +6,7 @@ import (
 	"github.com/andrewtian/minepong"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
+	"github.com/snowplow/referer-parser/go"
 	"io/ioutil"
 	"log"
 	"net"
@@ -275,6 +276,18 @@ func respondServerStatus(c *gin.Context) {
 	debug := c.Request.Form.Get("debug")
 
 	checkDebug, _ := strconv.ParseBool(debug)
+
+	referer := c.Request.Referer()
+	referer_parsed := refererparser.Parse(referer)
+
+	referer_domain := referer_parsed.URI.Host
+
+	if referer_domain != "" {
+		r := redisPool.Get()
+		defer r.Close()
+
+		r.Do("HINCRBY", "referers", referer_domain, 1)
+	}
 
 	if ip == "" {
 		if checkDebug {
