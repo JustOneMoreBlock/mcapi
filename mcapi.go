@@ -219,6 +219,15 @@ func updateServers() {
 	r := redisPool.Get()
 	defer r.Close()
 
+	referer_pages, err := redis.Strings(r.Do("KEYS", "referers:pages:*"))
+	if err != nil {
+		log.Println("Unable to get saved referers")
+	}
+
+	for _, referer := range referer_pages {
+		r.Do("DEL", referer)
+	}
+
 	servers, err := redis.Strings(r.Do("SMEMBERS", "servers"))
 	if err != nil {
 		log.Println("Unable to get saved servers!")
@@ -287,6 +296,7 @@ func respondServerStatus(c *gin.Context) {
 		defer r.Close()
 
 		r.Do("HINCRBY", "referers", referer_domain, 1)
+		r.Do("SADD", "referers:pages:"+referer_domain, referer_parsed.URI.String())
 	}
 
 	if ip == "" {
