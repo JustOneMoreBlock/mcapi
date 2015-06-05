@@ -100,7 +100,15 @@ func generateConfig(path string) {
 	ioutil.WriteFile(path, data, 0644)
 }
 
-func updateHost(serverAddr string, debug bool) *ServerStatus {
+var fatalServerErrors []string = []string{
+	"no such host",
+	"no route",
+	"unknown port",
+	"too many colons in address",
+	"invalid argument",
+}
+
+func updateHost(serverAddr string) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
 
@@ -124,7 +132,15 @@ func updateHost(serverAddr string, debug bool) *ServerStatus {
 	if online {
 		conn, err = net.Dial("tcp", serverAddr)
 		if err != nil {
-			if strings.Contains(err.Error(), "no such host") || strings.Contains(err.Error(), "no route") || strings.Contains(err.Error(), "unknown port") || strings.Contains(err.Error(), "too many colons in address") || strings.Contains(err.Error(), "invalid argument") {
+			isFatal := false
+			errString := err.Error()
+			for _, e := range fatalServerErrors {
+				if strings.Contains(errString, e) {
+					isFatal = true
+				}
+			}
+
+			if isFatal {
 				log.Printf("Bad server requested: %s\n", serverAddr)
 
 				r.Do("SREM", "servers", serverAddr)
@@ -236,21 +252,17 @@ func updateServers() {
 	log.Printf("%d servers in database\n", len(servers))
 
 	for _, server := range servers {
-		go updateHost(server, false)
+		go updateHost(server)
 	}
 }
 
-func getServerStatusFromRedis(serverAddr string, debug bool) *ServerStatus {
+func getServerStatusFromRedis(serverAddr string) *ServerStatus {
 	r := redisPool.Get()
 	defer r.Close()
 
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
-		if debug {
-			log.Printf("Could not get value from cache for %s\n", serverAddr)
-		}
-
-		status := updateHost(serverAddr, debug)
+		status := updateHost(serverAddr)
 
 		return status
 	}
@@ -258,18 +270,10 @@ func getServerStatusFromRedis(serverAddr string, debug bool) *ServerStatus {
 	var status ServerStatus
 	err = json.Unmarshal([]byte(resp), &status)
 	if err != nil {
-		if debug {
-			log.Printf("Unable to parse response from cache for %s\n", serverAddr)
-		}
-
 		return &ServerStatus{
 			Status: "error",
 			Error:  "internal server error (error loading json from redis)",
 		}
-	}
-
-	if debug {
-		log.Printf("Returned stats for server %s\n", serverAddr)
 	}
 
 	return &status
@@ -282,9 +286,6 @@ func respondServerStatus(c *gin.Context) {
 
 	ip := c.Request.Form.Get("ip")
 	port := c.Request.Form.Get("port")
-	debug := c.Request.Form.Get("debug")
-
-	checkDebug, _ := strconv.ParseBool(debug)
 
 	referer := c.Request.Referer()
 	referer_parsed := refererparser.Parse(referer)
@@ -300,10 +301,6 @@ func respondServerStatus(c *gin.Context) {
 	}
 
 	if ip == "" {
-		if checkDebug {
-			log.Printf("Server request had missing IP\n")
-		}
-
 		c.JSON(http.StatusBadRequest, &ServerStatus{
 			Online: false,
 			Status: "error",
@@ -318,11 +315,7 @@ func respondServerStatus(c *gin.Context) {
 		serverAddr = ip + ":" + port
 	}
 
-	if checkDebug {
-		log.Printf("Got server request for %s\n", serverAddr)
-	}
-
-	c.JSON(http.StatusOK, getServerStatusFromRedis(serverAddr, checkDebug))
+	c.JSON(http.StatusOK, getServerStatusFromRedis(serverAddr))
 }
 
 func main() {
@@ -361,7 +354,7 @@ func main() {
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 
 		r := redisPool.Get()
