@@ -119,6 +119,18 @@ func updateHost(serverAddr string) *ServerStatus {
 	online = true
 	veryOld = false
 
+	_, err := redis.Bool(r.Do("GET", "offline:"+serverAddr))
+	if err == nil {
+		log.Printf("Server %s was cached as offline\n", serverAddr)
+
+		status = &ServerStatus{}
+
+		status.Status = "success"
+		status.Online = false
+
+		return status
+	}
+
 	resp, err := redis.String(r.Do("GET", serverAddr))
 	if err != nil {
 		status = &ServerStatus{}
@@ -130,7 +142,7 @@ func updateHost(serverAddr string) *ServerStatus {
 
 	var conn net.Conn
 	if online {
-		conn, err = net.Dial("tcp", serverAddr)
+		conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
 		if err != nil {
 			isFatal := false
 			errString := err.Error()
@@ -150,6 +162,9 @@ func updateHost(serverAddr string) *ServerStatus {
 				status.Error = "invalid hostname or port"
 				status.Online = false
 
+				r.Do("SET", "offline:"+serverAddr, "1")
+				r.Do("EXPIRE", "offline:"+serverAddr, 60)
+
 				return status
 			}
 
@@ -159,6 +174,9 @@ func updateHost(serverAddr string) *ServerStatus {
 			status.Status = "success"
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+
+			r.Do("SET", "offline:"+serverAddr, "1")
+			r.Do("EXPIRE", "offline:"+serverAddr, 60)
 		}
 	}
 
@@ -174,6 +192,9 @@ func updateHost(serverAddr string) *ServerStatus {
 			status.Status = "success"
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+
+			r.Do("SET", "offline:"+serverAddr, "1")
+			r.Do("EXPIRE", "offline:"+serverAddr, 60)
 		}
 	}
 
