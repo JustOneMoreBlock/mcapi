@@ -90,8 +90,6 @@ func updateHost(serverAddr string) *ServerStatus {
 
 	resp, err := redisClient.Get("offline:" + serverAddr).Result()
 	if resp == "1" {
-		log.Printf("Server %s was cached as offline\n", serverAddr)
-
 		status = &ServerStatus{}
 
 		status.Status = "success"
@@ -122,8 +120,6 @@ func updateHost(serverAddr string) *ServerStatus {
 			}
 
 			if isFatal {
-				log.Printf("Bad server requested: %s\n", serverAddr)
-
 				redisClient.SRem("servers", serverAddr)
 				redisClient.Del(serverAddr)
 
@@ -135,8 +131,6 @@ func updateHost(serverAddr string) *ServerStatus {
 
 				return status
 			}
-
-			log.Printf("Server is offline: %s, %v\n", serverAddr, err)
 
 			online = false
 			status.Status = "success"
@@ -153,8 +147,6 @@ func updateHost(serverAddr string) *ServerStatus {
 	if online {
 		pong, err = minepong.Ping(conn, serverAddr)
 		if err != nil {
-			log.Printf("Server does not respond to ping: %s, %v", serverAddr, err)
-
 			online = false
 			status.Status = "success"
 			status.Online = false
