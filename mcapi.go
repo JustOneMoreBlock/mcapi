@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/andrewtian/minepong"
-	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
-	"github.com/snowplow/referer-parser/go"
+	"gopkg.in/redis.v3"
 	"io/ioutil"
 	"log"
 	"net"
@@ -19,8 +18,7 @@ import (
 
 type Config struct {
 	HttpAppHost   string
-	RedisPath     string
-	RedisDatabase string
+	RedisHost     []string
 	StaticFiles   string
 	TemplateFiles string
 }
@@ -46,32 +44,7 @@ type ServerStatus struct {
 	LastUpdated string              `json:"last_updated"`
 }
 
-var redisPool *redis.Pool
-
-func newRedisPool(server string, database string) *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("unix", server)
-			if err != nil {
-				return nil, err
-			}
-
-			if _, err := c.Do("SELECT", database); err != nil {
-				c.Close()
-				return nil, err
-			}
-
-			return c, err
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-
-			return err
-		},
-	}
-}
+var redisClient *redis.ClusterClient
 
 func loadConfig(path string) *Config {
 	file, e := ioutil.ReadFile(path)
@@ -89,8 +62,7 @@ func loadConfig(path string) *Config {
 func generateConfig(path string) {
 	cfg := &Config{
 		HttpAppHost:   ":8080",
-		RedisPath:     "/tmp/redis.sock",
-		RedisDatabase: "0",
+		RedisHost:     []string{":7000", ":7001"},
 		StaticFiles:   "./scripts",
 		TemplateFiles: "./templates/*",
 	}
@@ -109,9 +81,6 @@ var fatalServerErrors []string = []string{
 }
 
 func updateHost(serverAddr string) *ServerStatus {
-	r := redisPool.Get()
-	defer r.Close()
-
 	var online bool
 	var veryOld bool
 	var status *ServerStatus
@@ -119,8 +88,8 @@ func updateHost(serverAddr string) *ServerStatus {
 	online = true
 	veryOld = false
 
-	_, err := redis.Bool(r.Do("GET", "offline:"+serverAddr))
-	if err == nil {
+	resp, err := redisClient.Get("offline:" + serverAddr).Result()
+	if resp == "1" {
 		log.Printf("Server %s was cached as offline\n", serverAddr)
 
 		status = &ServerStatus{}
@@ -131,7 +100,7 @@ func updateHost(serverAddr string) *ServerStatus {
 		return status
 	}
 
-	resp, err := redis.String(r.Do("GET", serverAddr))
+	resp, err = redisClient.Get(serverAddr).Result()
 	if err != nil {
 		status = &ServerStatus{}
 	} else {
@@ -155,15 +124,14 @@ func updateHost(serverAddr string) *ServerStatus {
 			if isFatal {
 				log.Printf("Bad server requested: %s\n", serverAddr)
 
-				r.Do("SREM", "servers", serverAddr)
-				r.Do("DEL", serverAddr)
+				redisClient.SRem("servers", serverAddr)
+				redisClient.Del(serverAddr)
 
 				status.Status = "error"
 				status.Error = "invalid hostname or port"
 				status.Online = false
 
-				r.Do("SET", "offline:"+serverAddr, "1")
-				r.Do("EXPIRE", "offline:"+serverAddr, 60)
+				redisClient.Set("offline:"+serverAddr, "1", time.Minute)
 
 				return status
 			}
@@ -175,12 +143,11 @@ func updateHost(serverAddr string) *ServerStatus {
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 
-			r.Do("SET", "offline:"+serverAddr, "1")
-			r.Do("EXPIRE", "offline:"+serverAddr, 60)
+			redisClient.Set("offline:"+serverAddr, "1", time.Minute)
 		}
 	}
 
-	r.Do("SADD", "servers", serverAddr)
+	redisClient.SAdd("servers", serverAddr)
 
 	var pong *minepong.Pong
 	if online {
@@ -193,8 +160,7 @@ func updateHost(serverAddr string) *ServerStatus {
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 
-			r.Do("SET", "offline:"+serverAddr, "1")
-			r.Do("EXPIRE", "offline:"+serverAddr, 60)
+			redisClient.Set("offline:"+serverAddr, "1", time.Minute)
 		}
 	}
 
@@ -238,34 +204,22 @@ func updateHost(serverAddr string) *ServerStatus {
 		status.Error = "internal server error (unable to jsonify server status)"
 	}
 
-	_, err = r.Do("SET", serverAddr, data)
+	_, err = redisClient.Set(serverAddr, string(data[:]), 6*time.Hour).Result()
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to save json to redis)"
 	}
 
 	if veryOld || status.LastOnline == "" {
-		r.Do("SREM", "servers", serverAddr)
-		r.Do("DEL", serverAddr)
+		redisClient.SRem("servers", serverAddr)
+		redisClient.Del(serverAddr)
 	}
 
 	return status
 }
 
 func updateServers() {
-	r := redisPool.Get()
-	defer r.Close()
-
-	referer_pages, err := redis.Strings(r.Do("KEYS", "referers:pages:*"))
-	if err != nil {
-		log.Println("Unable to get saved referers")
-	}
-
-	for _, referer := range referer_pages {
-		r.Do("DEL", referer)
-	}
-
-	servers, err := redis.Strings(r.Do("SMEMBERS", "servers"))
+	servers, err := redisClient.SMembers("servers").Result()
 	if err != nil {
 		log.Println("Unable to get saved servers!")
 	}
@@ -278,10 +232,7 @@ func updateServers() {
 }
 
 func getServerStatusFromRedis(serverAddr string) *ServerStatus {
-	r := redisPool.Get()
-	defer r.Close()
-
-	resp, err := redis.String(r.Do("GET", serverAddr))
+	resp, err := redisClient.Get(serverAddr).Result()
 	if err != nil {
 		status := updateHost(serverAddr)
 
@@ -307,19 +258,6 @@ func respondServerStatus(c *gin.Context) {
 
 	ip := c.Request.Form.Get("ip")
 	port := c.Request.Form.Get("port")
-
-	referer := c.Request.Referer()
-	referer_parsed := refererparser.Parse(referer)
-
-	referer_domain := referer_parsed.URI.Host
-
-	if referer_domain != "" {
-		r := redisPool.Get()
-		defer r.Close()
-
-		r.Do("HINCRBY", "referers", referer_domain, 1)
-		r.Do("SADD", "referers:pages:"+referer_domain, referer_parsed.URI.String())
-	}
 
 	if ip == "" {
 		c.JSON(http.StatusBadRequest, &ServerStatus{
@@ -353,7 +291,9 @@ func main() {
 
 	cfg := loadConfig(*configFile)
 
-	redisPool = newRedisPool(cfg.RedisPath, cfg.RedisDatabase)
+	redisClient = redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: cfg.RedisHost,
+	})
 
 	log.Println("Updating saved servers")
 	go updateServers()
@@ -378,10 +318,7 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 
-		r := redisPool.Get()
-		defer r.Close()
-
-		r.Do("INCR", "mcapi")
+		redisClient.Incr("mcapi")
 
 		c.Next()
 	})
@@ -395,10 +332,7 @@ func main() {
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
-		r := redisPool.Get()
-		defer r.Close()
-
-		stats, _ := redis.Int64(r.Do("GET", "mcapi"))
+		stats, _ := redisClient.Get("mcapi").Int64()
 
 		c.JSON(http.StatusOK, gin.H{
 			"stats": stats,
