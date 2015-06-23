@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/andrewtian/minepong"
-	"github.com/dcu/http-einhorn"
+	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/redis.v3"
 	"io/ioutil"
@@ -334,9 +334,5 @@ func main() {
 	router.GET("/server/status", respondServerStatus)
 	router.GET("/minecraft/1.3/server/status", respondServerStatus)
 
-	if einhorn.IsRunning() {
-		einhorn.Start(router, 0)
-	} else {
-		router.Run(cfg.HttpAppHost)
-	}
+	endless.ListenAndServe(cfg.HttpAppHost, router)
 }
