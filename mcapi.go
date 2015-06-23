@@ -311,8 +311,6 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 
 		redisClient.Incr("mcapi")
-
-		c.Next()
 	})
 
 	router.GET("/", func(c *gin.Context) {
@@ -328,6 +326,7 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{
 			"stats": stats,
+			"time":  time.Now().Unix(),
 		})
 	})
 
