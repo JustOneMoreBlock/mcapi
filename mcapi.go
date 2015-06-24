@@ -327,7 +327,7 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{
 			"stats": stats,
-			"time":  time.Now().Unix(),
+			"time":  time.Now().UnixNano(),
 		})
 	})
 
