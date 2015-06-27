@@ -100,15 +100,26 @@ var fatalServerErrors []string = []string{
 }
 
 func updateServers() {
-	servers, err := redisClient.SMembers("servers").Result()
+	servers, err := redisClient.SMembers("serverping").Result()
 	if err != nil {
 		log.Println("Unable to get saved servers!")
 	}
 
-	log.Printf("%d servers in database\n", len(servers))
+	log.Printf("%d servers in ping database\n", len(servers))
 
 	for _, server := range servers {
 		go updatePing(server)
+	}
+
+	servers, err = redisClient.SMembers("serverquery").Result()
+	if err != nil {
+		log.Println("Unable to get saved servers!")
+	}
+
+	log.Printf("%d servers in query database\n", len(servers))
+
+	for _, server := range servers {
+		go updateQuery(server)
 	}
 }
 
