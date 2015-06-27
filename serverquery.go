@@ -85,6 +85,8 @@ func updateQuery(serverAddr string) *ServerQuery {
 		status.Players.Max = query.MaxPlayers
 		status.Players.Now = query.NumPlayers
 		status.Players.List = query.Players
+		status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+		status.LastOnline = strconv.FormatInt(time.Now().Unix(), 10)
 	} else {
 		i, err := strconv.ParseInt(status.LastOnline, 10, 64)
 		if err != nil {
