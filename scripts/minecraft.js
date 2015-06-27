@@ -96,7 +96,7 @@
         /**
          * Gets the status of a Minecraft server
          * @param  {String}   ip       ip or domain of server
-         * @param  {Object}   options  extra options, such as port or players
+         * @param  {Object}   options  extra options, such as port
          * @param  {Function} callback callback function
          * @return {undefined}            does not return
          */
@@ -111,6 +111,25 @@
             api.loadJSON('/server/status', options, callback);
         };
         MinecraftAPI.prototype['getServerStatus'] = MinecraftAPI.prototype.getServerStatus;
+
+        /**
+         * Gets all available query information of a Minecraft server
+         * @param  {String}   ip       ip or domain of server
+         * @param  {Object}   options  extra options, such as port
+         * @param  {Function} callback callback function
+         * @return {undefined}            does not return
+         */
+        MinecraftAPI.prototype.getServerQuery = function (ip, options, callback) {
+            if (typeof (options) === 'function') {
+                callback = options;
+                options = {};
+            }
+
+            options['ip'] = ip;
+
+            api.loadJSON('/server/query', options, callback);
+        };
+        MinecraftAPI.prototype['getServerQuery'] = MinecraftAPI.prototype.getServerQuery;
 
         return MinecraftAPI;
     }());
