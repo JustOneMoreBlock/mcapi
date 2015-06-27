@@ -118,6 +118,11 @@ func main() {
 
 	flag.Parse()
 
+	f, _ := os.OpenFile("mcapi.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	defer f.Close()
+
+	log.SetOutput(f)
+
 	if *genConfig {
 		generateConfig(*configFile)
 		log.Println("Saved configuration file with sane defaults, please update as needed")
