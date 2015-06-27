@@ -41,7 +41,7 @@ func updatePing(serverAddr string) *ServerStatus {
 
 	var conn net.Conn
 	if online {
-		conn, err = net.DialTimeout("tcp", "ping:"+serverAddr, 2*time.Second)
+		conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
 		if err != nil {
 			isFatal := false
 			errString := err.Error()
