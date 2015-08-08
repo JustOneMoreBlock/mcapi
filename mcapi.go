@@ -158,6 +158,7 @@ func main() {
 	}()
 
 	router := gin.New()
+	gin.SetMode(gin.ReleaseMode)
 	router.Use(gin.Recovery())
 
 	router.Static("/scripts", cfg.StaticFiles)
