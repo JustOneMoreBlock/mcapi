@@ -5,6 +5,7 @@ import (
 	"flag"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/redis.v3"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -131,7 +132,7 @@ func main() {
 	f, _ := os.OpenFile("mcapi.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	defer f.Close()
 
-	log.SetOutput(f)
+	log.SetOutput(io.MultiWriter(f, os.Stdout))
 
 	if *genConfig {
 		generateConfig(*configFile)
