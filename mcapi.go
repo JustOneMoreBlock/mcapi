@@ -168,6 +168,7 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
+		c.Writer.Header().Set("Cache-Control", "max-age=300, public, s-maxage=300")
 
 		redisClient.Incr("mcapi")
 	})
