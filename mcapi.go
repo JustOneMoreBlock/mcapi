@@ -156,7 +156,8 @@ func main() {
 		}
 	}()
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLFiles(cfg.TemplateFile)
