@@ -13,10 +13,10 @@ import (
 )
 
 type Config struct {
-	HttpAppHost   string
-	RedisHost     string
-	StaticFiles   string
-	TemplateFiles string
+	HttpAppHost  string
+	RedisHost    string
+	StaticFiles  string
+	TemplateFile string
 }
 
 type ServerStatusPlayers struct {
@@ -79,10 +79,10 @@ func loadConfig(path string) *Config {
 
 func generateConfig(path string) {
 	cfg := &Config{
-		HttpAppHost:   ":8080",
-		RedisHost:     ":6379",
-		StaticFiles:   "./scripts",
-		TemplateFiles: "./templates/*",
+		HttpAppHost:  ":8080",
+		RedisHost:    ":6379",
+		StaticFiles:  "./scripts",
+		TemplateFile: "./templates/index.html",
 	}
 
 	data, _ := json.MarshalIndent(cfg, "", "	")
@@ -159,7 +159,7 @@ func main() {
 	router := gin.Default()
 
 	router.Static("/scripts", cfg.StaticFiles)
-	router.LoadHTMLGlob(cfg.TemplateFiles)
+	router.LoadHTMLFiles(cfg.TemplateFile)
 
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
