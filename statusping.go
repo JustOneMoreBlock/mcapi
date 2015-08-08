@@ -132,6 +132,7 @@ func updatePing(serverAddr string) *ServerStatus {
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to save json to redis)"
+		log.Println(err.Error())
 	}
 
 	if veryOld || status.LastOnline == "" {

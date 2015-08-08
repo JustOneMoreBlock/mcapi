@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/redis.v3"
 	"io/ioutil"
@@ -157,8 +156,7 @@ func main() {
 		}
 	}()
 
-	router := gin.New()
-	router.Use(gin.Recovery())
+	router := gin.Default()
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLGlob(cfg.TemplateFiles)
@@ -196,5 +194,5 @@ func main() {
 	router.GET("/server/query", respondServerQuery)
 	router.GET("/minecraft/1.3/server/query", respondServerQuery)
 
-	endless.ListenAndServe(cfg.HttpAppHost, router)
+	router.Run(cfg.HttpAppHost)
 }
