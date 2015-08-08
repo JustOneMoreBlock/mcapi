@@ -15,7 +15,7 @@ import (
 
 type Config struct {
 	HttpAppHost   string
-	RedisHost     []string
+	RedisHost     string
 	StaticFiles   string
 	TemplateFiles string
 }
@@ -63,7 +63,7 @@ type ServerQuery struct {
 	LastUpdated string             `json:"last_updated"`
 }
 
-var redisClient *redis.ClusterClient
+var redisClient *redis.Client
 
 func loadConfig(path string) *Config {
 	file, e := ioutil.ReadFile(path)
@@ -81,7 +81,7 @@ func loadConfig(path string) *Config {
 func generateConfig(path string) {
 	cfg := &Config{
 		HttpAppHost:   ":8080",
-		RedisHost:     []string{":7000", ":7001"},
+		RedisHost:     ":6379",
 		StaticFiles:   "./scripts",
 		TemplateFiles: "./templates/*",
 	}
@@ -142,8 +142,8 @@ func main() {
 
 	cfg := loadConfig(*configFile)
 
-	redisClient = redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: cfg.RedisHost,
+	redisClient = redis.NewClient(&redis.Options{
+		Addr: cfg.RedisHost,
 	})
 
 	log.Println("Updating saved servers")
