@@ -3,6 +3,7 @@ package mcapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/syfaro/mcapi/types"
 	"io/ioutil"
@@ -28,6 +29,10 @@ func GetServerStatus(ip string, port int) (*types.ServerStatus, error) {
 		return nil, err
 	}
 
+	if status.Error != "" {
+		return &status, errors.New(status.Error)
+	}
+
 	return &status, nil
 }
 
@@ -47,6 +52,10 @@ func GetServerQuery(ip string, port int) (*types.ServerQuery, error) {
 	err = json.Unmarshal(data, &status)
 	if err != nil {
 		return nil, err
+	}
+
+	if status.Error != "" {
+		return &status, errors.New(status.Error)
 	}
 
 	return &status, nil
