@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/lukevers/mc/mcquery"
+	"github.com/syfaro/mcapi/types"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,17 +12,17 @@ import (
 	"time"
 )
 
-func updateQuery(serverAddr string) *ServerQuery {
+func updateQuery(serverAddr string) *types.ServerQuery {
 	var online bool
 	var veryOld bool
-	var status *ServerQuery
+	var status *types.ServerQuery
 
 	online = true
 	veryOld = false
 
 	resp, err := redisClient.Get("query:" + serverAddr).Result()
 	if err != nil {
-		status = &ServerQuery{}
+		status = &types.ServerQuery{}
 	} else {
 		json.Unmarshal([]byte(resp), &status)
 	}
@@ -81,7 +82,7 @@ func updateQuery(serverAddr string) *ServerQuery {
 		status.ServerMod = query.ServerMod
 		status.Map = query.Map
 		status.Plugins = query.Plugins
-		status.Players = ServerQueryPlayers{}
+		status.Players = types.ServerQueryPlayers{}
 		status.Players.Max = query.MaxPlayers
 		status.Players.Now = query.NumPlayers
 		status.Players.List = query.Players
@@ -119,7 +120,7 @@ func updateQuery(serverAddr string) *ServerQuery {
 	return status
 }
 
-func getServerQueryFromRedis(serverAddr string) *ServerQuery {
+func getServerQueryFromRedis(serverAddr string) *types.ServerQuery {
 	resp, err := redisClient.Get("query:" + serverAddr).Result()
 	if err != nil {
 		status := updateQuery(serverAddr)
@@ -127,10 +128,10 @@ func getServerQueryFromRedis(serverAddr string) *ServerQuery {
 		return status
 	}
 
-	var status ServerQuery
+	var status types.ServerQuery
 	err = json.Unmarshal([]byte(resp), &status)
 	if err != nil {
-		return &ServerQuery{
+		return &types.ServerQuery{
 			Status: "error",
 			Error:  "internal server error (error loading json from redis)",
 		}
@@ -148,7 +149,7 @@ func respondServerQuery(c *gin.Context) {
 	port := c.Request.Form.Get("port")
 
 	if ip == "" {
-		c.JSON(http.StatusBadRequest, &ServerQuery{
+		c.JSON(http.StatusBadRequest, &types.ServerQuery{
 			Online: false,
 			Status: "error",
 			Error:  "missing data",

@@ -20,49 +20,6 @@ type Config struct {
 	TemplateFile string
 }
 
-type ServerStatusPlayers struct {
-	Max int `json:"max"`
-	Now int `json:"now"`
-}
-
-type ServerStatusServer struct {
-	Name     string `json:"name"`
-	Protocol int    `json:"protocol"`
-}
-
-type ServerStatus struct {
-	Status      string              `json:"status"`
-	Online      bool                `json:"online"`
-	Motd        string              `json:"motd"`
-	Error       string              `json:"error"`
-	Players     ServerStatusPlayers `json:"players"`
-	Server      ServerStatusServer  `json:"server"`
-	LastOnline  string              `json:"last_online"`
-	LastUpdated string              `json:"last_updated"`
-}
-
-type ServerQueryPlayers struct {
-	Max  int      `json:"max"`
-	Now  int      `json:"now"`
-	List []string `json:"list"`
-}
-
-type ServerQuery struct {
-	Status      string             `json:"status"`
-	Online      bool               `json:"online"`
-	Error       string             `json:"error"`
-	Motd        string             `json:"motd"`
-	Version     string             `json:"version"`
-	GameType    string             `json:"game_type"`
-	GameID      string             `json:"game_id"`
-	ServerMod   string             `json:"server_mod"`
-	Map         string             `json:"map"`
-	Players     ServerQueryPlayers `json:"players"`
-	Plugins     []string           `json:"plugins"`
-	LastOnline  string             `json:"last_online"`
-	LastUpdated string             `json:"last_updated"`
-}
-
 var redisClient *redis.Client
 
 func loadConfig(path string) *Config {
@@ -158,7 +115,6 @@ func main() {
 	}()
 
 	router := gin.New()
-	gin.SetMode(gin.ReleaseMode)
 	router.Use(gin.Recovery())
 
 	router.Static("/scripts", cfg.StaticFiles)

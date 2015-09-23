@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/syfaro/mcapi/types"
 	"github.com/syfaro/minepong"
 	"log"
 	"net"
@@ -12,17 +13,17 @@ import (
 	"time"
 )
 
-func updatePing(serverAddr string) *ServerStatus {
+func updatePing(serverAddr string) *types.ServerStatus {
 	var online bool
 	var veryOld bool
-	var status *ServerStatus
+	var status *types.ServerStatus
 
 	online = true
 	veryOld = false
 
 	resp, err := redisClient.Get("offline:" + serverAddr).Result()
 	if resp == "1" {
-		status = &ServerStatus{}
+		status = &types.ServerStatus{}
 
 		status.Status = "success"
 		status.Online = false
@@ -32,7 +33,7 @@ func updatePing(serverAddr string) *ServerStatus {
 
 	resp, err = redisClient.Get("ping:" + serverAddr).Result()
 	if err != nil {
-		status = &ServerStatus{}
+		status = &types.ServerStatus{}
 	} else {
 		json.Unmarshal([]byte(resp), &status)
 	}
@@ -143,7 +144,7 @@ func updatePing(serverAddr string) *ServerStatus {
 	return status
 }
 
-func getServerStatusFromRedis(serverAddr string) *ServerStatus {
+func getServerStatusFromRedis(serverAddr string) *types.ServerStatus {
 	resp, err := redisClient.Get("ping:" + serverAddr).Result()
 	if err != nil {
 		status := updatePing(serverAddr)
@@ -151,10 +152,10 @@ func getServerStatusFromRedis(serverAddr string) *ServerStatus {
 		return status
 	}
 
-	var status ServerStatus
+	var status types.ServerStatus
 	err = json.Unmarshal([]byte(resp), &status)
 	if err != nil {
-		return &ServerStatus{
+		return &types.ServerStatus{
 			Status: "error",
 			Error:  "internal server error (error loading json from redis)",
 		}
@@ -172,7 +173,7 @@ func respondServerStatus(c *gin.Context) {
 	port := c.Request.Form.Get("port")
 
 	if ip == "" {
-		c.JSON(http.StatusBadRequest, &ServerStatus{
+		c.JSON(http.StatusBadRequest, &types.ServerStatus{
 			Online: false,
 			Status: "error",
 			Error:  "missing data",
