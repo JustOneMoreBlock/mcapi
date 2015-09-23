@@ -1,0 +1,9 @@
+# binary files
+mcapi
+client
+
+# config files
+*.json
+
+# logs
+*.log
