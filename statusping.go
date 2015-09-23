@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/andrewtian/minepong"
 	"github.com/gin-gonic/gin"
+	"github.com/syfaro/minepong"
 	"log"
 	"net"
 	"net/http"
