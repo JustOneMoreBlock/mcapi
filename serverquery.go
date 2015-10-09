@@ -13,12 +13,9 @@ import (
 )
 
 func updateQuery(serverAddr string) *types.ServerQuery {
-	var online bool
-	var veryOld bool
+	online := true
+	veryOld := false
 	var status *types.ServerQuery
-
-	online = true
-	veryOld = false
 
 	resp, err := redisClient.Get("query:" + serverAddr).Result()
 	if err != nil {

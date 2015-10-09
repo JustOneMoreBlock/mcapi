@@ -56,30 +56,6 @@ var fatalServerErrors []string = []string{
 	"invalid argument",
 }
 
-func updateServers() {
-	servers, err := redisClient.SMembers("serverping").Result()
-	if err != nil {
-		log.Println("Unable to get saved servers!")
-	}
-
-	log.Printf("%d servers in ping database\n", len(servers))
-
-	for _, server := range servers {
-		go updatePing(server)
-	}
-
-	servers, err = redisClient.SMembers("serverquery").Result()
-	if err != nil {
-		log.Println("Unable to get saved servers!")
-	}
-
-	log.Printf("%d servers in query database\n", len(servers))
-
-	for _, server := range servers {
-		go updateQuery(server)
-	}
-}
-
 func main() {
 	configFile := flag.String("config", "config.json", "path to configuration file")
 	genConfig := flag.Bool("gencfg", false, "generate configuration file with sane defaults")
@@ -102,17 +78,6 @@ func main() {
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: cfg.RedisHost,
 	})
-
-	log.Println("Updating saved servers")
-	go updateServers()
-	go func() {
-		t := time.NewTicker(5 * time.Minute)
-
-		for _ = range t.C {
-			log.Println("Updating saved servers")
-			updateServers()
-		}
-	}()
 
 	router := gin.New()
 	router.Use(gin.Recovery())
