@@ -18,7 +18,8 @@ import (
 )
 
 type Config struct {
-	RedisHost string
+	RedisHost     string
+	RedisPassword string
 }
 
 var redisClient *redis.Client
@@ -38,7 +39,8 @@ func loadConfig(path string) *Config {
 
 func generateConfig(path string) {
 	cfg := &Config{
-		RedisHost: ":6379",
+		RedisHost:     ":6379",
+		RedisPassword: "pass",
 	}
 
 	data, _ := json.MarshalIndent(cfg, "", "	")
@@ -336,6 +338,10 @@ func main() {
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: cfg.RedisHost,
 	})
+
+	if cfg.RedisPassword != "" {
+		redisClient.Auth(cfg.RedisPassword)
+	}
 
 	log.Println("Updating saved servers")
 	go updateServers()
