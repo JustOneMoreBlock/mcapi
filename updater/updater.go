@@ -345,13 +345,11 @@ func main() {
 
 	log.Println("Updating saved servers")
 	go updateServers()
-	go func() {
-		t := time.NewTicker(5 * time.Minute)
+	t := time.NewTicker(5 * time.Minute)
 
-		for _ = range t.C {
-			log.Println("Updating saved servers")
-			updateServers()
-		}
-	}()
+	for _ = range t.C {
+		log.Println("Updating saved servers")
+		updateServers()
+	}
 
 }
