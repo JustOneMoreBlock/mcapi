@@ -153,9 +153,12 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			return
 		}
 
-		bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+		bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
 			Database: "mcapi",
 		})
+		if err != nil {
+			log.Println(err)
+		}
 
 		tags := map[string]string{"type": "ping"}
 		fields := map[string]interface{}{
@@ -166,10 +169,17 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			"server_protocol": status.Server.Protocol,
 		}
 
-		pt, _ := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		if err != nil {
+			log.Println(err)
+		}
+
 		bp.AddPoint(pt)
 
-		influxClient.Write(bp)
+		err = influxClient.Write(bp)
+		if err != nil {
+			log.Println(err)
+		}
 	}()
 
 	return status

@@ -102,9 +102,14 @@ func main() {
 
 	cfg := loadConfig(*configFile)
 
-	influxClient, _ = influxdb.NewUDPClient(influxdb.UDPConfig{
+	i, err := influxdb.NewUDPClient(influxdb.UDPConfig{
 		Addr: cfg.InfluxHost,
 	})
+	if err != nil {
+		log.Println(err)
+	}
+
+	influxClient = i
 
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: cfg.RedisHost,

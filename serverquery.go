@@ -129,9 +129,12 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			return
 		}
 
-		bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+		bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
 			Database: "mcapi",
 		})
+		if err != nil {
+			log.Println(err)
+		}
 
 		tags := map[string]string{"type": "query"}
 		fields := map[string]interface{}{
@@ -142,10 +145,16 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			"version":        status.Version,
 		}
 
-		pt, _ := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
 		bp.AddPoint(pt)
+		if err != nil {
+			log.Println(err)
+		}
 
-		influxClient.Write(bp)
+		err = influxClient.Write(bp)
+		if err != nil {
+			log.Println(err)
+		}
 	}()
 
 	return status
