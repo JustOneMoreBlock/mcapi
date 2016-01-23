@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/gin-gonic/gin"
+	influxdb "github.com/influxdata/influxdb/client/v2"
 	"gopkg.in/redis.v3"
 	"io"
 	"io/ioutil"
@@ -18,9 +19,11 @@ type Config struct {
 	RedisHost    string
 	StaticFiles  string
 	TemplateFile string
+	InfluxHost   string
 }
 
 var redisClient *redis.Client
+var influxClient influxdb.Client
 
 func loadConfig(path string) *Config {
 	file, e := ioutil.ReadFile(path)
@@ -98,6 +101,10 @@ func main() {
 	}
 
 	cfg := loadConfig(*configFile)
+
+	influxClient, _ = influxdb.NewUDPClient(influxdb.UDPConfig{
+		Addr: cfg.InfluxHost,
+	})
 
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: cfg.RedisHost,

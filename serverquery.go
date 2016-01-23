@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	influxdb "github.com/influxdata/influxdb/client/v2"
 	"github.com/lukevers/mc/mcquery"
 	"github.com/syfaro/mcapi/types"
 	"log"
@@ -19,6 +20,8 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 
 	online = true
 	veryOld = false
+
+	t := time.Now()
 
 	resp, err := redisClient.Get("query:" + serverAddr).Result()
 	if err != nil {
@@ -100,6 +103,10 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		}
 	}
 
+	diff := time.Since(t)
+
+	status.Duration = diff.Nanoseconds()
+
 	data, err := json.Marshal(status)
 	if err != nil {
 		status.Status = "error"
@@ -116,6 +123,30 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		redisClient.SRem("serverquery", serverAddr)
 		redisClient.Del("query:" + serverAddr)
 	}
+
+	go func() {
+		if !status.Online {
+			return
+		}
+
+		bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+			Database: "mcapi",
+		})
+
+		tags := map[string]string{"type": "query"}
+		fields := map[string]interface{}{
+			"duration":       diff.Nanoseconds(),
+			"players_online": status.Players.Now,
+			"players_max":    status.Players.Max,
+			"game_type":      status.GameType,
+			"version":        status.Version,
+		}
+
+		pt, _ := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		bp.AddPoint(pt)
+
+		influxClient.Write(bp)
+	}()
 
 	return status
 }

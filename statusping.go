@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	influxdb "github.com/influxdata/influxdb/client/v2"
 	"github.com/syfaro/mcapi/types"
 	"github.com/syfaro/minepong"
 	"log"
@@ -20,6 +21,8 @@ func updatePing(serverAddr string) *types.ServerStatus {
 
 	online = true
 	veryOld = false
+
+	t := time.Now()
 
 	resp, err := redisClient.Get("offline:" + serverAddr).Result()
 	if resp == "1" {
@@ -123,6 +126,10 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		}
 	}
 
+	diff := time.Since(t)
+
+	status.Duration = diff.Nanoseconds()
+
 	data, err := json.Marshal(status)
 	if err != nil {
 		status.Status = "error"
@@ -140,6 +147,30 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		redisClient.SRem("serverping", serverAddr)
 		redisClient.Del("ping:" + serverAddr)
 	}
+
+	go func() {
+		if !status.Online {
+			return
+		}
+
+		bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+			Database: "mcapi",
+		})
+
+		tags := map[string]string{"type": "ping"}
+		fields := map[string]interface{}{
+			"duration":        diff.Nanoseconds(),
+			"players_online":  status.Players.Now,
+			"players_max":     status.Players.Max,
+			"server_name":     status.Server.Name,
+			"server_protocol": status.Server.Protocol,
+		}
+
+		pt, _ := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		bp.AddPoint(pt)
+
+		influxClient.Write(bp)
+	}()
 
 	return status
 }

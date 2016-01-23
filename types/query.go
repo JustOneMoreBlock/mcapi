@@ -24,4 +24,5 @@ type ServerQuery struct {
 	Plugins     []string           `json:"plugins"`
 	LastOnline  string             `json:"last_online"`
 	LastUpdated string             `json:"last_updated"`
+	Duration    int64              `json:"duration"`
 }

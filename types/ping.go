@@ -25,4 +25,5 @@ type ServerStatus struct {
 	Server      ServerStatusServer  `json:"server"`
 	LastOnline  string              `json:"last_online"`
 	LastUpdated string              `json:"last_updated"`
+	Duration    int64               `json:"duration"`
 }
