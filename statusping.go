@@ -160,7 +160,10 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			log.Println(err)
 		}
 
-		tags := map[string]string{"type": "ping"}
+		tags := map[string]string{
+			"type":   "ping",
+			"server": serverAddr,
+		}
 		fields := map[string]interface{}{
 			"duration":        diff.Nanoseconds(),
 			"players_online":  status.Players.Now,

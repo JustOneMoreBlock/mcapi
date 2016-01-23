@@ -136,7 +136,10 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			log.Println(err)
 		}
 
-		tags := map[string]string{"type": "query"}
+		tags := map[string]string{
+			"type":   "query",
+			"server": serverAddr,
+		}
 		fields := map[string]interface{}{
 			"duration":       diff.Nanoseconds(),
 			"players_online": status.Players.Now,
