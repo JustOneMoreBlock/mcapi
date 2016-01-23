@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -55,10 +56,10 @@ func InfluxDBLogger() gin.HandlerFunc {
 		pointLock.Lock()
 
 		point, _ := influxdb.NewPoint("request", map[string]string{
-			"host": c.Request.Host,
+			"host":   c.Request.Host,
+			"status": strconv.Itoa(status),
 		}, map[string]interface{}{
 			"latency": latency.Nanoseconds(),
-			"status":  status,
 		})
 
 		points = append(points, point)
