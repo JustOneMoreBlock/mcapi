@@ -137,15 +137,15 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		}
 
 		tags := map[string]string{
-			"type":   "query",
-			"server": serverAddr,
+			"type":      "query",
+			"server":    serverAddr,
+			"game_type": status.GameType,
+			"version":   status.Version,
 		}
 		fields := map[string]interface{}{
 			"duration":       diff.Nanoseconds(),
 			"players_online": status.Players.Now,
 			"players_max":    status.Players.Max,
-			"game_type":      status.GameType,
-			"version":        status.Version,
 		}
 
 		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())

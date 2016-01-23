@@ -161,15 +161,15 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		}
 
 		tags := map[string]string{
-			"type":   "ping",
-			"server": serverAddr,
+			"type":            "ping",
+			"server":          serverAddr,
+			"server_name":     status.Server.Name,
+			"server_protocol": strconv.Itoa(status.Server.Protocol),
 		}
 		fields := map[string]interface{}{
-			"duration":        diff.Nanoseconds(),
-			"players_online":  status.Players.Now,
-			"players_max":     status.Players.Max,
-			"server_name":     status.Server.Name,
-			"server_protocol": status.Server.Protocol,
+			"duration":       diff.Nanoseconds(),
+			"players_online": status.Players.Now,
+			"players_max":    status.Players.Max,
 		}
 
 		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
