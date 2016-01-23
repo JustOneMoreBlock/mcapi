@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -25,6 +26,10 @@ type Config struct {
 var redisClient *redis.Client
 var influxClient influxdb.Client
 
+var points []*influxdb.Point
+
+var pointLock sync.Mutex
+
 func loadConfig(path string) *Config {
 	file, e := ioutil.ReadFile(path)
 
@@ -36,6 +41,54 @@ func loadConfig(path string) *Config {
 	json.Unmarshal(file, &cfg)
 
 	return &cfg
+}
+
+func InfluxDBLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		t := time.Now()
+
+		c.Next()
+
+		latency := time.Since(t)
+		status := c.Writer.Status()
+
+		pointLock.Lock()
+
+		point, _ := influxdb.NewPoint("request", map[string]string{
+			"host": c.Request.Host,
+		}, map[string]interface{}{
+			"latency": latency.Nanoseconds(),
+			"status":  status,
+		})
+
+		points = append(points, point)
+
+		if len(points) > 500 {
+			go func() {
+				bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+					Database: "mcapi",
+				})
+				if err != nil {
+					log.Println(err)
+				}
+
+				for _, point := range points {
+					bp.AddPoint(point)
+				}
+
+				err = influxClient.Write(bp)
+				if err != nil {
+					log.Println(err)
+				}
+
+				points = []*influxdb.Point{}
+
+				pointLock.Unlock()
+			}()
+		} else {
+			pointLock.Unlock()
+		}
+	}
 }
 
 func generateConfig(path string) {
@@ -102,6 +155,8 @@ func main() {
 
 	cfg := loadConfig(*configFile)
 
+	pointLock = sync.Mutex{}
+
 	i, err := influxdb.NewUDPClient(influxdb.UDPConfig{
 		Addr: cfg.InfluxHost,
 	})
@@ -128,6 +183,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(InfluxDBLogger())
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLFiles(cfg.TemplateFile)
