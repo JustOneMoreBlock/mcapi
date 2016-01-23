@@ -60,7 +60,7 @@ func InfluxDBLogger() gin.HandlerFunc {
 			"status": strconv.Itoa(status),
 		}, map[string]interface{}{
 			"latency": latency.Nanoseconds(),
-		})
+		}, time.Now())
 
 		points = append(points, point)
 
