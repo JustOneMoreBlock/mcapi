@@ -185,13 +185,11 @@ func main() {
 		Addr: cfg.RedisHost,
 	})
 
-	log.Println("Updating saved servers")
 	go updateServers()
 	go func() {
-		t := time.NewTicker(5 * time.Minute)
+		t := time.NewTicker(time.Minute)
 
 		for _ = range t.C {
-			log.Println("Updating saved servers")
 			updateServers()
 		}
 	}()

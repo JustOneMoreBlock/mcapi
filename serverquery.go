@@ -33,7 +33,6 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 
 	i, _ := strconv.ParseInt(status.LastUpdated, 10, 64)
 	if time.Unix(i, 0).Add(5 * time.Minute).After(time.Now()) {
-		log.Printf("Server %s was going to be updated early!\n", serverAddr)
 		return status
 	}
 
