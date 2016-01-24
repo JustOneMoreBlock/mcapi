@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	influxdb "github.com/influxdata/influxdb/client/v2"
 	"gopkg.in/redis.v3"
@@ -22,6 +23,7 @@ type Config struct {
 	StaticFiles  string
 	TemplateFile string
 	InfluxHost   string
+	SentryDSN    string
 }
 
 var redisClient *redis.Client
@@ -32,10 +34,11 @@ var points []*influxdb.Point
 var pointLock sync.Mutex
 
 func loadConfig(path string) *Config {
-	file, e := ioutil.ReadFile(path)
+	file, err := ioutil.ReadFile(path)
 
-	if e != nil {
-		log.Fatal("Error loading configuration file!")
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		panic(err)
 	}
 
 	var cfg Config
@@ -66,11 +69,13 @@ func InfluxDBLogger() gin.HandlerFunc {
 
 		if len(points) > 500 {
 			go func() {
+				defer pointLock.Unlock()
+
 				bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
 					Database: "mcapi",
 				})
 				if err != nil {
-					log.Println(err)
+					raven.CaptureErrorAndWait(err, nil)
 				}
 
 				for _, point := range points {
@@ -79,12 +84,10 @@ func InfluxDBLogger() gin.HandlerFunc {
 
 				err = influxClient.Write(bp)
 				if err != nil {
-					log.Println(err)
+					raven.CaptureErrorAndWait(err, nil)
 				}
 
 				points = []*influxdb.Point{}
-
-				pointLock.Unlock()
 			}()
 		} else {
 			pointLock.Unlock()
@@ -116,7 +119,7 @@ var fatalServerErrors []string = []string{
 func updateServers() {
 	servers, err := redisClient.SMembers("serverping").Result()
 	if err != nil {
-		log.Println("Unable to get saved servers!")
+		raven.CaptureErrorAndWait(err, nil)
 	}
 
 	log.Printf("%d servers in ping database\n", len(servers))
@@ -127,7 +130,7 @@ func updateServers() {
 
 	servers, err = redisClient.SMembers("serverquery").Result()
 	if err != nil {
-		log.Println("Unable to get saved servers!")
+		raven.CaptureErrorAndWait(err, nil)
 	}
 
 	log.Printf("%d servers in query database\n", len(servers))
@@ -156,13 +159,15 @@ func main() {
 
 	cfg := loadConfig(*configFile)
 
+	raven.SetDSN(cfg.SentryDSN)
+
 	pointLock = sync.Mutex{}
 
 	i, err := influxdb.NewUDPClient(influxdb.UDPConfig{
 		Addr: cfg.InfluxHost,
 	})
 	if err != nil {
-		log.Println(err)
+		raven.CaptureErrorAndWait(err, nil)
 	}
 
 	influxClient = i

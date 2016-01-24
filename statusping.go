@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	influxdb "github.com/influxdata/influxdb/client/v2"
 	"github.com/syfaro/mcapi/types"
@@ -134,13 +135,14 @@ func updatePing(serverAddr string) *types.ServerStatus {
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to jsonify server status)"
+		raven.CaptureErrorAndWait(err, nil)
 	}
 
 	_, err = redisClient.Set("ping:"+serverAddr, string(data), 6*time.Hour).Result()
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to save json to redis)"
-		log.Println(err.Error())
+		raven.CaptureErrorAndWait(err, nil)
 	}
 
 	if veryOld || status.LastOnline == "" {
@@ -157,7 +159,7 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			Database: "mcapi",
 		})
 		if err != nil {
-			log.Println(err)
+			raven.CaptureErrorAndWait(err, nil)
 		}
 
 		tags := map[string]string{
@@ -174,14 +176,14 @@ func updatePing(serverAddr string) *types.ServerStatus {
 
 		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
 		if err != nil {
-			log.Println(err)
+			raven.CaptureErrorAndWait(err, nil)
 		}
 
 		bp.AddPoint(pt)
 
 		err = influxClient.Write(bp)
 		if err != nil {
-			log.Println(err)
+			raven.CaptureErrorAndWait(err, nil)
 		}
 	}()
 
