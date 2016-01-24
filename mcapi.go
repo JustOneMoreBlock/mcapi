@@ -56,14 +56,17 @@ func InfluxDBLogger() gin.HandlerFunc {
 		latency := time.Since(t)
 		status := c.Writer.Status()
 
-		pointLock.Lock()
-
-		point, _ := influxdb.NewPoint("request", map[string]string{
+		point, err := influxdb.NewPoint("request", map[string]string{
 			"host":   c.Request.Host,
 			"status": strconv.Itoa(status),
 		}, map[string]interface{}{
 			"latency": latency.Nanoseconds(),
 		}, time.Now())
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
+
+		pointLock.Lock()
 
 		points = append(points, point)
 
@@ -103,9 +106,15 @@ func generateConfig(path string) {
 		TemplateFile: "./templates/index.html",
 	}
 
-	data, _ := json.MarshalIndent(cfg, "", "	")
+	data, err := json.MarshalIndent(cfg, "", "	")
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+	}
 
-	ioutil.WriteFile(path, data, 0644)
+	err = ioutil.WriteFile(path, data, 0644)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+	}
 }
 
 var fatalServerErrors []string = []string{
@@ -213,7 +222,10 @@ func main() {
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
-		stats, _ := redisClient.Get("mcapi").Int64()
+		stats, err := redisClient.Get("mcapi").Int64()
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"stats": stats,

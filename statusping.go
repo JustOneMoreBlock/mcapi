@@ -155,13 +155,6 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			return
 		}
 
-		bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-			Database: "mcapi",
-		})
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
-
 		tags := map[string]string{
 			"type":            "ping",
 			"server":          serverAddr,
@@ -174,17 +167,14 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			"players_max":    status.Players.Max,
 		}
 
-		pt, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
+		point, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 		}
 
-		bp.AddPoint(pt)
-
-		err = influxClient.Write(bp)
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
+		pointLock.Lock()
+		points = append(points, point)
+		pointLock.Unlock()
 	}()
 
 	return status
