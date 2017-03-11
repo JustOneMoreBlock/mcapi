@@ -26,7 +26,7 @@ type ServerStatus struct {
 	Status        string              `json:"status"`
 	Online        bool                `json:"online"`
 	Motd          string              `json:"motd"`
-	MotdExtra     []MotdExtra         `json:"motd_extra,omitempty"`
+	MotdExtra     interface{}         `json:"motd_extra,omitempty"`
 	MotdFormatted string              `json:"motd_formatted,omitempty"`
 	Error         string              `json:"error"`
 	Players       ServerStatusPlayers `json:"players"`
