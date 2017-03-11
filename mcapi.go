@@ -3,17 +3,15 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"github.com/DeanThompson/ginpprof"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
-	influxdb "github.com/influxdata/influxdb/client/v2"
-	"gopkg.in/redis.v3"
+	"gopkg.in/redis.v5"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
-	"sync"
 	"time"
 )
 
@@ -22,16 +20,10 @@ type Config struct {
 	RedisHost    string
 	StaticFiles  string
 	TemplateFile string
-	InfluxHost   string
 	SentryDSN    string
 }
 
 var redisClient *redis.Client
-var influxClient influxdb.Client
-
-var points []*influxdb.Point
-
-var pointLock sync.Mutex
 
 func loadConfig(path string) *Config {
 	file, err := ioutil.ReadFile(path)
@@ -45,57 +37,6 @@ func loadConfig(path string) *Config {
 	json.Unmarshal(file, &cfg)
 
 	return &cfg
-}
-
-func InfluxDBLogger() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		t := time.Now()
-
-		c.Next()
-
-		latency := time.Since(t)
-		status := c.Writer.Status()
-
-		point, err := influxdb.NewPoint("request", map[string]string{
-			"host":   c.Request.Host,
-			"status": strconv.Itoa(status),
-		}, map[string]interface{}{
-			"latency": latency.Nanoseconds(),
-		}, time.Now())
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
-
-		pointLock.Lock()
-
-		points = append(points, point)
-
-		if len(points) > 500 {
-			go func() {
-				defer pointLock.Unlock()
-
-				bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-					Database: "mcapi",
-				})
-				if err != nil {
-					raven.CaptureErrorAndWait(err, nil)
-				}
-
-				for _, point := range points {
-					bp.AddPoint(point)
-				}
-
-				err = influxClient.Write(bp)
-				if err != nil {
-					raven.CaptureErrorAndWait(err, nil)
-				}
-
-				points = []*influxdb.Point{}
-			}()
-		} else {
-			pointLock.Unlock()
-		}
-	}
 }
 
 func generateConfig(path string) {
@@ -170,19 +111,9 @@ func main() {
 
 	raven.SetDSN(cfg.SentryDSN)
 
-	pointLock = sync.Mutex{}
-
-	i, err := influxdb.NewUDPClient(influxdb.UDPConfig{
-		Addr: cfg.InfluxHost,
-	})
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-	}
-
-	influxClient = i
-
 	redisClient = redis.NewClient(&redis.Options{
-		Addr: cfg.RedisHost,
+		Addr:     cfg.RedisHost,
+		PoolSize: 1000,
 	})
 
 	go updateServers()
@@ -196,7 +127,6 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(InfluxDBLogger())
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLFiles(cfg.TemplateFile)
@@ -236,6 +166,8 @@ func main() {
 
 	router.GET("/server/query", respondServerQuery)
 	router.GET("/minecraft/1.3/server/query", respondServerQuery)
+
+	ginpprof.Wrapper(router)
 
 	router.Run(cfg.HttpAppHost)
 }

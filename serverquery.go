@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
-	influxdb "github.com/influxdata/influxdb/client/v2"
 	"github.com/syfaro/mc/mcquery"
 	"github.com/syfaro/mcapi/types"
 	"log"
@@ -131,33 +130,6 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		redisClient.SRem("serverquery", serverAddr)
 		redisClient.Del("query:" + serverAddr)
 	}
-
-	go func() {
-		if !status.Online {
-			return
-		}
-
-		tags := map[string]string{
-			"type":      "query",
-			"server":    serverAddr,
-			"game_type": status.GameType,
-			"version":   status.Version,
-		}
-		fields := map[string]interface{}{
-			"duration":       diff.Nanoseconds(),
-			"players_online": status.Players.Now,
-			"players_max":    status.Players.Max,
-		}
-
-		point, err := influxdb.NewPoint("server_info", tags, fields, time.Now())
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
-
-		pointLock.Lock()
-		points = append(points, point)
-		pointLock.Unlock()
-	}()
 
 	return status
 }
