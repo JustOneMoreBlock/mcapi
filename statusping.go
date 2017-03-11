@@ -111,8 +111,6 @@ func updatePing(serverAddr string) *types.ServerStatus {
 				b := bytes.Buffer{}
 				f := bytes.Buffer{}
 
-				var extras []types.MotdExtra
-
 				f.WriteString("<span>")
 
 				for id, text := range texts {
@@ -129,8 +127,6 @@ func updatePing(serverAddr string) *types.ServerStatus {
 							extra.Bold = v.(bool)
 						}
 					}
-
-					extras = append(extras, extra)
 
 					f.WriteString("<span")
 
@@ -162,7 +158,7 @@ func updatePing(serverAddr string) *types.ServerStatus {
 				f.WriteString("</span>")
 
 				status.Motd = b.String()
-				status.MotdExtra = extras
+				status.MotdExtra = val
 				status.MotdFormatted = strings.Replace(f.String(), "\n", "<br>", -1)
 			} else if val, ok := desc["text"]; ok {
 				status.Motd = val.(string)
