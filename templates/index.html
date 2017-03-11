@@ -199,17 +199,12 @@
 
   <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
-  <script src="//files.syfaro.net/assets/js/syfaro.js"></script>
   <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/8.5/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.2/moment.min.js"></script>
   <script>
   (function () {
     'use strict';
 
     hljs.initHighlightingOnLoad();
-
-    var syf = new Syfaro();
 
     var doOnEach = function (items, fn) {
       for (var i = 0; i < items.length; i++) {
@@ -217,8 +212,20 @@
       }
     };
 
+    var load = function (url, done) {
+      var xhr = new XMLHttpRequest();
+
+      xhr.open('GET', 'https://mcapi.us/' + url);
+
+      xhr.onload = function () {
+        done(JSON.parse(xhr.responseText));
+      };
+
+      xhr.send();
+    };
+
     var loadStats = function () {
-      syf.get('/stats').then(function (stats) {
+      load('stats', function (stats) {
         doOnEach(document.querySelectorAll('.stats.stats-total'), function (item) {
           item.innerHTML = stats.stats;
         });
@@ -229,7 +236,7 @@
     };
 
     var loadMyServer = function () {
-      syf.get('/server/status?ip=mc.syfaro.net').then(function (resp) {
+      load('server/status?ip=mc.syfaro.net', function (resp) {
         document.querySelector('#live-server-response').innerHTML = JSON.stringify(resp, null, '  ');
 
         $('pre code').each(function (i, block) {
