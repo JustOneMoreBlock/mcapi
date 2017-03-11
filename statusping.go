@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
@@ -104,7 +105,66 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		case string:
 			status.Motd = desc
 		case map[string]interface{}:
-			if val, ok := desc["text"]; ok {
+			if val, ok := desc["extra"]; ok {
+				texts := val.([]interface{})
+
+				b := bytes.Buffer{}
+				f := bytes.Buffer{}
+
+				var extras []types.MotdExtra
+
+				f.WriteString("<span>")
+
+				for id, text := range texts {
+					m := text.(map[string]interface{})
+					extra := types.MotdExtra{}
+
+					for k, v := range m {
+						if k == "text" {
+							b.WriteString(v.(string))
+							extra.Text = v.(string)
+						} else if k == "color" {
+							extra.Color = v.(string)
+						} else if k == "bold" {
+							extra.Bold = v.(bool)
+						}
+					}
+
+					extras = append(extras, extra)
+
+					f.WriteString("<span")
+
+					if extra.Color != "" || extra.Bold {
+						f.WriteString(" style='")
+
+						if extra.Color != "" {
+							f.WriteString("color: ")
+							f.WriteString(extra.Color)
+							f.WriteString("; ")
+						}
+
+						if extra.Bold {
+							f.WriteString(" font-weight: bold; ")
+						}
+
+						f.WriteString("'")
+					}
+
+					f.WriteString(">")
+					f.WriteString(extra.Text)
+					f.WriteString("</span>")
+
+					if id != len(texts)-1 {
+						f.WriteString(" ")
+					}
+				}
+
+				f.WriteString("</span>")
+
+				status.Motd = b.String()
+				status.MotdExtra = extras
+				status.MotdFormatted = strings.Replace(f.String(), "\n", "<br>", -1)
+			} else if val, ok := desc["text"]; ok {
 				status.Motd = val.(string)
 			}
 		default:

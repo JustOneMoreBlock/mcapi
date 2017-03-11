@@ -14,16 +14,24 @@ type ServerStatusServer struct {
 	Protocol int    `json:"protocol"`
 }
 
+type MotdExtra struct {
+	Bold  bool   `json:"bold"`
+	Color string `json:"color"`
+	Text  string `json:"text"`
+}
+
 // ServerStatus contains all information available from a ping request.
 // It also includes fields about the success of a request.
 type ServerStatus struct {
-	Status      string              `json:"status"`
-	Online      bool                `json:"online"`
-	Motd        string              `json:"motd"`
-	Error       string              `json:"error"`
-	Players     ServerStatusPlayers `json:"players"`
-	Server      ServerStatusServer  `json:"server"`
-	LastOnline  string              `json:"last_online"`
-	LastUpdated string              `json:"last_updated"`
-	Duration    int64               `json:"duration"`
+	Status        string              `json:"status"`
+	Online        bool                `json:"online"`
+	Motd          string              `json:"motd"`
+	MotdExtra     []MotdExtra         `json:"motd_extra,omitempty"`
+	MotdFormatted string              `json:"motd_formatted,omitempty"`
+	Error         string              `json:"error"`
+	Players       ServerStatusPlayers `json:"players"`
+	Server        ServerStatusServer  `json:"server"`
+	LastOnline    string              `json:"last_online"`
+	LastUpdated   string              `json:"last_updated"`
+	Duration      int64               `json:"duration"`
 }
