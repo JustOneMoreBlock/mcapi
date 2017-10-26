@@ -76,7 +76,7 @@ func updateServers() {
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 	}
-	queries, err := redis.String(r.Do("SMEMBERS", "serverquery"))
+	queries, err := redis.Strings(r.Do("SMEMBERS", "serverquery"))
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 	}
