@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	"github.com/syfaro/mc/mcquery"
@@ -16,27 +17,17 @@ import (
 func updateQuery(serverAddr string) *types.ServerQuery {
 	var online bool
 	var veryOld bool
-	var status *types.ServerQuery
+	var status = &types.ServerQuery{}
 
 	online = true
 	veryOld = false
 
 	t := time.Now()
 
-	resp, err := redisClient.Get("query:" + serverAddr).Result()
-	if err != nil {
-		status = &types.ServerQuery{}
-	} else {
-		json.Unmarshal([]byte(resp), &status)
-	}
+	r := redisPool.Get()
+	defer r.Close()
 
-	i, _ := strconv.ParseInt(status.LastUpdated, 10, 64)
-	if time.Unix(i, 0).Add(5 * time.Minute).After(time.Now()) {
-		return status
-	}
-
-	status.Error = ""
-
+	var err error
 	var conn *mcquery.Connection
 	if online {
 		conn, err = mcquery.Connect(serverAddr)
@@ -50,8 +41,8 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			}
 
 			if isFatal {
-				redisClient.SRem("serverquery", serverAddr)
-				redisClient.Del("query:" + serverAddr)
+				r.Do("SREM", "serverquery", serverAddr)
+				r.Do("DEL", "query:"+serverAddr)
 
 				status.Status = "error"
 				status.Error = "invalid hostname or port"
@@ -67,7 +58,7 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		}
 	}
 
-	redisClient.SAdd("serverquery", serverAddr)
+	r.Do("SADD", "serverquery", serverAddr)
 
 	var query *mcquery.Stat
 	if online {
@@ -119,7 +110,8 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 		raven.CaptureErrorAndWait(err, nil)
 	}
 
-	_, err = redisClient.Set("query:"+serverAddr, string(data), 6*time.Hour).Result()
+	_, err = r.Do("SETEX", "query:"+serverAddr, 6*60*60, string(data))
+
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to save json to redis)"
@@ -127,15 +119,18 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 	}
 
 	if veryOld || status.LastOnline == "" {
-		redisClient.SRem("serverquery", serverAddr)
-		redisClient.Del("query:" + serverAddr)
+		r.Do("SREM", "serverquery", serverAddr)
+		r.Do("DEL", "query:"+serverAddr)
 	}
 
 	return status
 }
 
 func getServerQueryFromRedis(serverAddr string) *types.ServerQuery {
-	resp, err := redisClient.Get("query:" + serverAddr).Result()
+	r := redisPool.Get()
+	resp, err := redis.String(r.Do("GET", "query:"+serverAddr))
+	r.Close()
+
 	if err != nil {
 		status := updateQuery(serverAddr)
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	"github.com/syfaro/mcapi/types"
@@ -18,14 +19,18 @@ import (
 func updatePing(serverAddr string) *types.ServerStatus {
 	var online bool
 	var veryOld bool
-	var status *types.ServerStatus
+	var status = &types.ServerStatus{}
 
 	online = true
 	veryOld = false
 
 	t := time.Now()
 
-	resp, err := redisClient.Get("offline:" + serverAddr).Result()
+	r := redisPool.Get()
+	defer r.Close()
+
+	resp, err := redis.String(r.Do("GET", "offline:"+serverAddr))
+
 	if resp == "1" {
 		status = &types.ServerStatus{}
 
@@ -34,20 +39,6 @@ func updatePing(serverAddr string) *types.ServerStatus {
 
 		return status
 	}
-
-	resp, err = redisClient.Get("ping:" + serverAddr).Result()
-	if err != nil {
-		status = &types.ServerStatus{}
-	} else {
-		json.Unmarshal([]byte(resp), &status)
-	}
-
-	i, _ := strconv.ParseInt(status.LastUpdated, 10, 64)
-	if time.Unix(i, 0).Add(5 * time.Minute).After(time.Now()) {
-		return status
-	}
-
-	status.Error = ""
 
 	var conn net.Conn
 	if online {
@@ -62,14 +53,14 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			}
 
 			if isFatal {
-				redisClient.SRem("serverping", serverAddr)
-				redisClient.Del("ping:" + serverAddr)
+				r.Do("SREM", "serverping", serverAddr)
+				r.Do("DEL", "ping:"+serverAddr)
 
 				status.Status = "error"
 				status.Error = "invalid hostname or port"
 				status.Online = false
 
-				redisClient.Set("offline:"+serverAddr, "1", time.Minute)
+				r.Do("SETEX", "offline:"+serverAddr, 60, "1")
 
 				return status
 			}
@@ -79,11 +70,11 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 
-			redisClient.Set("offline:"+serverAddr, "1", time.Minute)
+			r.Do("SETEX", "offline:"+serverAddr, 60, "1")
 		}
 	}
 
-	redisClient.SAdd("serverping", serverAddr)
+	r.Do("SADD", "serverping", serverAddr)
 
 	var pong *minepong.Pong
 	if online {
@@ -94,7 +85,7 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			status.Online = false
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 
-			redisClient.Set("offline:"+serverAddr, "1", time.Minute)
+			r.Do("SETEX", "offline:"+serverAddr, 60, "1")
 		}
 	}
 
@@ -198,7 +189,7 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		raven.CaptureErrorAndWait(err, nil)
 	}
 
-	_, err = redisClient.Set("ping:"+serverAddr, string(data), 6*time.Hour).Result()
+	_, err = r.Do("SETEX", "ping:"+serverAddr, 6*60*60, string(data))
 	if err != nil {
 		status.Status = "error"
 		status.Error = "internal server error (unable to save json to redis)"
@@ -206,15 +197,18 @@ func updatePing(serverAddr string) *types.ServerStatus {
 	}
 
 	if veryOld || status.LastOnline == "" {
-		redisClient.SRem("serverping", serverAddr)
-		redisClient.Del("ping:" + serverAddr)
+		r.Do("SREM", "serverping", serverAddr)
+		r.Do("DEL", "ping:"+serverAddr)
 	}
 
 	return status
 }
 
 func getServerStatusFromRedis(serverAddr string) *types.ServerStatus {
-	resp, err := redisClient.Get("ping:" + serverAddr).Result()
+	r := redisPool.Get()
+	resp, err := redis.String(r.Do("GET", "ping:"+serverAddr))
+	r.Close()
+
 	if err != nil {
 		status := updatePing(serverAddr)
 

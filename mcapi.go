@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
-	"github.com/DeanThompson/ginpprof"
+	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/redis.v5"
+	"github.com/gocraft/work"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,7 +24,9 @@ type Config struct {
 	SentryDSN    string
 }
 
-var redisClient *redis.Client
+var redisPool *redis.Pool
+
+var enqueuer *work.Enqueuer
 
 func loadConfig(path string) *Config {
 	file, err := ioutil.ReadFile(path)
@@ -67,26 +70,62 @@ var fatalServerErrors []string = []string{
 }
 
 func updateServers() {
-	servers, err := redisClient.SMembers("serverping").Result()
+	r := redisPool.Get()
+
+	pings, err := redis.Strings(r.Do("SMEMBERS", "serverping"))
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+	}
+	queries, err := redis.String(r.Do("SMEMBERS", "serverquery"))
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 	}
 
-	log.Printf("%d servers in ping database\n", len(servers))
+	r.Close()
 
-	for _, server := range servers {
-		go updatePing(server)
+	for _, server := range pings {
+		enqueuer.EnqueueUnique("status", work.Q{"serverAddr": server})
 	}
 
-	servers, err = redisClient.SMembers("serverquery").Result()
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+	for _, server := range queries {
+		enqueuer.EnqueueUnique("query", work.Q{"serverAddr": server})
 	}
+}
 
-	log.Printf("%d servers in query database\n", len(servers))
+type JobCtx struct{}
 
-	for _, server := range servers {
-		go updateQuery(server)
+func jobMiddleware(job *work.Job, next work.NextMiddlewareFunc) error {
+	log.Printf("Running %s: %+v\n", job.Name, job.Args)
+	return next()
+}
+
+func jobUpdateQuery(job *work.Job) error {
+	if _, ok := job.Args["serverAddr"]; ok {
+		serverAddr := job.ArgString("serverAddr")
+
+		res := updateQuery(serverAddr)
+		if res.Error != "" {
+			return errors.New(res.Error)
+		} else {
+			return nil
+		}
+	} else {
+		return errors.New("missing server address")
+	}
+}
+
+func jobUpdateStatus(job *work.Job) error {
+	if _, ok := job.Args["serverAddr"]; ok {
+		serverAddr := job.ArgString("serverAddr")
+
+		res := updatePing(serverAddr)
+		if res.Error != "" {
+			return errors.New(res.Error)
+		} else {
+			return nil
+		}
+	} else {
+		return errors.New("missing server address")
 	}
 }
 
@@ -111,16 +150,29 @@ func main() {
 
 	raven.SetDSN(cfg.SentryDSN)
 
-	redisClient = redis.NewClient(&redis.Options{
-		Addr:     cfg.RedisHost,
-		PoolSize: 1000,
-	})
+	redisPool = &redis.Pool{
+		MaxActive: 750,
+		MaxIdle:   250,
+		Wait:      true,
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", cfg.RedisHost)
+		},
+	}
 
-	go updateServers()
+	enqueuer = work.NewEnqueuer("mcapi", redisPool)
+
+	pool := work.NewWorkerPool(JobCtx{}, 50, "mcapi", redisPool)
+
+	pool.Middleware(jobMiddleware)
+
+	pool.Job("query", jobUpdateQuery)
+	pool.Job("status", jobUpdateStatus)
+
+	go pool.Start()
+
+	updateServers()
 	go func() {
-		t := time.NewTicker(time.Minute)
-
-		for _ = range t.C {
+		for _ = range time.Tick(5 * time.Minute) {
 			updateServers()
 		}
 	}()
@@ -138,7 +190,9 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 		c.Writer.Header().Set("Cache-Control", "max-age=300, public, s-maxage=300")
 
-		redisClient.Incr("mcapi")
+		r := redisPool.Get()
+		r.Do("INCR", "mcapi")
+		r.Close()
 	})
 
 	router.GET("/", func(c *gin.Context) {
@@ -150,7 +204,10 @@ func main() {
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
-		stats, err := redisClient.Get("mcapi").Int64()
+		r := redisPool.Get()
+		stats, err := redis.Int64(r.Do("GET", "mcapi"))
+		r.Close()
+
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 		}
@@ -166,8 +223,6 @@ func main() {
 
 	router.GET("/server/query", respondServerQuery)
 	router.GET("/minecraft/1.3/server/query", respondServerQuery)
-
-	ginpprof.Wrapper(router)
 
 	router.Run(cfg.HttpAppHost)
 }
