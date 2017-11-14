@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,22 @@ import (
 	"strings"
 	"time"
 )
+
+func resolveSRV(addr string) (host string, port uint16, err error) {
+	h, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", 0, err
+	}
+
+	_, addrs, err := net.LookupSRV("minecraft", "tcp", h)
+	if err != nil || len(addrs) == 0 {
+		return "", 0, errors.New("unable to find SRV record")
+	}
+
+	addrs[0].Target = strings.TrimSuffix(addrs[0].Target, ".")
+
+	return addrs[0].Target, addrs[0].Port, nil
+}
 
 func updatePing(serverAddr string) *types.ServerStatus {
 	var online bool
@@ -40,38 +57,44 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		return status
 	}
 
-	var conn net.Conn
-	if online {
-		conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
-		if err != nil {
-			isFatal := false
-			errString := err.Error()
-			for _, e := range fatalServerErrors {
-				if strings.Contains(errString, e) {
-					isFatal = true
-				}
+	var realHost string
+
+	srvHost, srvPort, err := resolveSRV(serverAddr)
+	if err == nil {
+		realHost = srvHost + ":" + strconv.Itoa(int(srvPort))
+	} else {
+		realHost = serverAddr
+	}
+
+	conn, err := net.DialTimeout("tcp", realHost, 2*time.Second)
+	if err != nil {
+		isFatal := false
+		errString := err.Error()
+		for _, e := range fatalServerErrors {
+			if strings.Contains(errString, e) {
+				isFatal = true
 			}
+		}
 
-			if isFatal {
-				r.Do("SREM", "serverping", serverAddr)
-				r.Do("DEL", "ping:"+serverAddr)
+		if isFatal {
+			r.Do("SREM", "serverping", serverAddr)
+			r.Do("DEL", "ping:"+serverAddr)
 
-				status.Status = "error"
-				status.Error = "invalid hostname or port"
-				status.Online = false
-
-				r.Do("SETEX", "offline:"+serverAddr, 60, "1")
-
-				return status
-			}
-
-			online = false
-			status.Status = "success"
+			status.Status = "error"
+			status.Error = "invalid hostname or port"
 			status.Online = false
-			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 
 			r.Do("SETEX", "offline:"+serverAddr, 60, "1")
+
+			return status
 		}
+
+		online = false
+		status.Status = "success"
+		status.Online = false
+		status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
+
+		r.Do("SETEX", "offline:"+serverAddr, 60, "1")
 	}
 
 	r.Do("SADD", "serverping", serverAddr)
