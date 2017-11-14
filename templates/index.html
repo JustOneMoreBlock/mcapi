@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width">
   <meta name="description" content="A simple way to check the status of a Minecraft server and display the results along with numbers of players online on your website.">
   <meta name="theme-color" content="#6AFF42">
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.4/paper/bootstrap.min.css">
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/8.5/styles/default.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.7/journal/bootstrap.min.css">
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css">
   <script>if (window.location.hostname === "api.syfaro.net") window.location = "https://mcapi.us";</script>
 
   <style>
@@ -184,8 +184,17 @@
                 <td>the date the status of the server was last updated at. it updates every five minutes, so you may send requests as soon as it has expired.</td>
                 <td>1431985691</td>
               </tr>
+              <tr>
+                <td>duration</td>
+                <td>the time it took to process the original request, in nanoseconds.</td>
+                <td>143439400</td>
+              </tr>
             </tbody>
           </table>
+        </p>
+
+        <p>
+          If you're looking for more information about the server, such as what plugins are installed or the name of the players currently online, you can try the <code>/server/query</code> endpoint instead. It takes the same parameters, and can be used with the provided JavaScript library by calling <code>MinecraftAPI.getServerQuery</code> instead.
         </p>
 
         <p>
@@ -197,56 +206,30 @@
 
   <div style="margin-bottom: 10px"></div>
 
-  <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/8.5/highlight.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
   <script>
   (function () {
     'use strict';
 
     hljs.initHighlightingOnLoad();
 
-    var doOnEach = function (items, fn) {
-      for (var i = 0; i < items.length; i++) {
-        fn(items[i]);
-      }
-    };
-
-    var load = function (url, done) {
-      var xhr = new XMLHttpRequest();
-
-      xhr.open('GET', 'https://mcapi.us/' + url);
-
-      xhr.onload = function () {
-        done(JSON.parse(xhr.responseText));
-      };
-
-      xhr.send();
-    };
-
-    var loadStats = function () {
-      load('stats', function (stats) {
-        doOnEach(document.querySelectorAll('.stats.stats-total'), function (item) {
-          item.innerHTML = stats.stats;
-        });
+    const loadStats = () =>
+      fetch(`/stats?${Date.now()}`).then(resp => resp.json()).then(resp => {
+        Array.from(document.querySelectorAll('.stats.stats-total')).forEach(item => item.innerHTML = resp.stats);
         setTimeout(loadStats, 1000);
-      }, function (err) {
-        setTimeout(loadStats, 1000);
-      });
-    };
+      })
 
-    var loadMyServer = function () {
-      load('server/status?ip=mc.syfaro.net', function (resp) {
+    const loadServer = (ip) =>
+      fetch(`/server/status?ip=${ip}`).then(resp => resp.json()).then(resp => {
         document.querySelector('#live-server-response').innerHTML = JSON.stringify(resp, null, '  ');
 
-        $('pre code').each(function (i, block) {
-          hljs.highlightBlock(block);
-        });
-      });
-    };
+        Array.from(document.querySelectorAll('pre code')).forEach(item => hljs.highlightBlock(item));
+      })
 
     loadStats();
-    loadMyServer();
+    loadServer('c.nerd.nu');
   }());
   </script>
 </body>
