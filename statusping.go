@@ -3,35 +3,17 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	"github.com/syfaro/mcapi/types"
 	"github.com/syfaro/minepong"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
-
-func resolveSRV(addr string) (host string, port uint16, err error) {
-	h, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", 0, err
-	}
-
-	_, addrs, err := net.LookupSRV("minecraft", "tcp", h)
-	if err != nil || len(addrs) == 0 {
-		return "", 0, errors.New("unable to find SRV record")
-	}
-
-	addrs[0].Target = strings.TrimSuffix(addrs[0].Target, ".")
-
-	return addrs[0].Target, addrs[0].Port, nil
-}
 
 func updatePing(serverAddr string) *types.ServerStatus {
 	var online bool
@@ -57,16 +39,8 @@ func updatePing(serverAddr string) *types.ServerStatus {
 		return status
 	}
 
-	var realHost string
+	pong, err := minepong.Ping(serverAddr)
 
-	srvHost, srvPort, err := resolveSRV(serverAddr)
-	if err == nil {
-		realHost = srvHost + ":" + strconv.Itoa(int(srvPort))
-	} else {
-		realHost = serverAddr
-	}
-
-	conn, err := net.DialTimeout("tcp", realHost, 2*time.Second)
 	if err != nil {
 		isFatal := false
 		errString := err.Error()
@@ -98,19 +72,6 @@ func updatePing(serverAddr string) *types.ServerStatus {
 	}
 
 	r.Do("SADD", "serverping", serverAddr)
-
-	var pong *minepong.Pong
-	if online {
-		pong, err = minepong.Ping(conn, serverAddr)
-		if err != nil {
-			online = false
-			status.Status = "success"
-			status.Online = false
-			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
-
-			r.Do("SETEX", "offline:"+serverAddr, 60, "1")
-		}
-	}
 
 	if online {
 		status.Status = "success"
