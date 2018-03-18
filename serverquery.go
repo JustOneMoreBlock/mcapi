@@ -109,7 +109,7 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 func getQueryFromCacheOrUpdate(serverAddr string) *types.ServerQuery {
 	serverAddr = strings.ToLower(serverAddr)
 
-	if status, ok := pingMap.GetOK(serverAddr); ok {
+	if status, ok := queryMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerQuery)
 	}
 
