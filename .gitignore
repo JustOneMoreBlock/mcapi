@@ -1,6 +1,7 @@
 # binary files
 mcapi
 client
+*.exe
 
 # config files
 *.json

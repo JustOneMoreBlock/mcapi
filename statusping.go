@@ -2,14 +2,15 @@ package main
 
 import (
 	"bytes"
-	"github.com/gin-gonic/gin"
-	"github.com/syfaro/mcapi/types"
-	"github.com/syfaro/minepong"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/syfaro/mcapi/types"
+	"github.com/syfaro/minepong"
 )
 
 func updatePing(serverAddr string) *types.ServerStatus {
@@ -154,6 +155,8 @@ func updatePing(serverAddr string) *types.ServerStatus {
 }
 
 func getStatusFromCacheOrUpdate(serverAddr string) *types.ServerStatus {
+	serverAddr = strings.ToLower(serverAddr)
+
 	if status, ok := pingMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerStatus)
 	}

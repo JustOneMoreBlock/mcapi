@@ -20,24 +20,8 @@
       margin-top: 25px;
     }
 
-    .row p,
-    .panel-heading {
+    .row p {
       font-size: 1.5em;
-    }
-
-    .panel {
-      vertical-align: top;
-      display: inline-block;
-      width: 215px;
-      margin: 5px;
-    }
-
-    @media (max-width: 768px) {
-      .panel {
-        display: block;
-        width: 100%;
-        margin: 1px;
-      }
     }
   </style>
 </head>
@@ -219,14 +203,14 @@
       fetch(`/stats?${Date.now()}`).then(resp => resp.json()).then(resp => {
         Array.from(document.querySelectorAll('.stats.stats-total')).forEach(item => item.innerHTML = resp.stats);
         setTimeout(loadStats, 1000);
-      })
+      });
 
     const loadServer = (ip) =>
       fetch(`/server/status?ip=${ip}`).then(resp => resp.json()).then(resp => {
         document.querySelector('#live-server-response').innerHTML = JSON.stringify(resp, null, '  ');
 
         Array.from(document.querySelectorAll('pre code')).forEach(item => hljs.highlightBlock(item));
-      })
+      });
 
     loadStats();
     loadServer('c.nerd.nu');

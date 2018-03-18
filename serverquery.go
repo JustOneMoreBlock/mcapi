@@ -1,14 +1,15 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/syfaro/mc/mcquery"
-	"github.com/syfaro/mcapi/types"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/syfaro/mc/mcquery"
+	"github.com/syfaro/mcapi/types"
 )
 
 func updateQuery(serverAddr string) *types.ServerQuery {
@@ -106,6 +107,8 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 }
 
 func getQueryFromCacheOrUpdate(serverAddr string) *types.ServerQuery {
+	serverAddr = strings.ToLower(serverAddr)
+
 	if status, ok := pingMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerQuery)
 	}

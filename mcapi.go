@@ -4,17 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"github.com/OneOfOne/cmap"
-	"github.com/garyburd/redigo/redis"
-	"github.com/getsentry/raven-go"
-	"github.com/gin-gonic/gin"
-	"github.com/gocraft/work"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/OneOfOne/cmap/stringcmap"
+	"github.com/garyburd/redigo/redis"
+	"github.com/getsentry/raven-go"
+	"github.com/gin-gonic/gin"
+	"github.com/gocraft/work"
 )
 
 type Config struct {
@@ -29,8 +30,8 @@ var redisPool *redis.Pool
 
 var enqueuer *work.Enqueuer
 
-var pingMap *cmap.CMap
-var queryMap *cmap.CMap
+var pingMap *stringcmap.CMap
+var queryMap *stringcmap.CMap
 
 func loadConfig(path string) *Config {
 	file, err := ioutil.ReadFile(path)
@@ -74,14 +75,14 @@ var fatalServerErrors = []string{
 }
 
 func updateServers() {
-	pingMap.ForEachLocked(func(key, _ interface{}) bool {
-		enqueuer.Enqueue("status", work.Q{"serverAddr": key.(string)})
+	pingMap.ForEachLocked(func(key string, _ interface{}) bool {
+		enqueuer.Enqueue("status", work.Q{"serverAddr": key})
 
 		return true
 	})
 
-	queryMap.ForEachLocked(func(key, _ interface{}) bool {
-		enqueuer.Enqueue("query", work.Q{"serverAddr": key.(string)})
+	queryMap.ForEachLocked(func(key string, _ interface{}) bool {
+		enqueuer.Enqueue("query", work.Q{"serverAddr": key})
 
 		return true
 	})
@@ -155,8 +156,8 @@ func main() {
 		},
 	}
 
-	pingMap = cmap.New()
-	queryMap = cmap.New()
+	pingMap = stringcmap.New()
+	queryMap = stringcmap.New()
 
 	enqueuer = work.NewEnqueuer("mcapi", redisPool)
 

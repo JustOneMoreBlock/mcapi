@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/syfaro/mcapi/types"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/syfaro/mcapi/types"
 )
 
 // APIEndpoint is the endpoint to use for requesting any information.
