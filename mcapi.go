@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/OneOfOne/cmap/stringcmap"
@@ -16,6 +17,7 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	"github.com/gocraft/work"
+	"github.com/syfaro/mcapi/types"
 )
 
 type Config struct {
@@ -24,6 +26,7 @@ type Config struct {
 	StaticFiles  string
 	TemplateFile string
 	SentryDSN    string
+	AdminKey     string
 }
 
 var redisPool *redis.Pool
@@ -53,6 +56,7 @@ func generateConfig(path string) {
 		RedisHost:    ":6379",
 		StaticFiles:  "./scripts",
 		TemplateFile: "./templates/index.html",
+		AdminKey:     "your_secret",
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "	")
@@ -219,6 +223,64 @@ func main() {
 
 	router.GET("/server/query", respondServerQuery)
 	router.GET("/minecraft/1.3/server/query", respondServerQuery)
+
+	authorized := router.Group("/admin", gin.BasicAuth(gin.Accounts{
+		"mcapi": cfg.AdminKey,
+	}))
+
+	authorized.GET("/ping", func(c *gin.Context) {
+		items := strings.Builder{}
+
+		pingMap.ForEachLocked(func(key string, val interface{}) bool {
+			ping, ok := val.(*types.ServerStatus)
+			if !ok {
+				return true
+			}
+
+			items.WriteString(key)
+			items.Write([]byte(" - "))
+			items.WriteString(ping.LastUpdated)
+			items.Write([]byte("\n"))
+
+			return true
+		})
+
+		c.String(http.StatusOK, items.String())
+	})
+
+	authorized.GET("/query", func(c *gin.Context) {
+		items := strings.Builder{}
+
+		queryMap.ForEachLocked(func(key string, val interface{}) bool {
+			ping, ok := val.(*types.ServerQuery)
+			if !ok {
+				return true
+			}
+
+			items.WriteString(key)
+			items.Write([]byte(" - "))
+			items.WriteString(ping.LastUpdated)
+			items.Write([]byte("\n"))
+
+			return true
+		})
+
+		c.String(http.StatusOK, items.String())
+	})
+
+	authorized.POST("/clear", func(c *gin.Context) {
+		pingMap.ForEach(func(key string, _ interface{}) bool {
+			pingMap.Delete(key)
+			return true
+		})
+
+		queryMap.ForEach(func(key string, _ interface{}) bool {
+			queryMap.Delete(key)
+			return true
+		})
+
+		c.String(http.StatusOK, "Cleared items.")
+	})
 
 	router.Run(cfg.HttpAppHost)
 }
