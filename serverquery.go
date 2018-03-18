@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/garyburd/redigo/redis"
-	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
 	"github.com/syfaro/mc/mcquery"
 	"github.com/syfaro/mcapi/types"
@@ -15,6 +12,8 @@ import (
 )
 
 func updateQuery(serverAddr string) *types.ServerQuery {
+	log.Printf("Querying %s\n", serverAddr)
+
 	var online bool
 	var veryOld bool
 	var status = &types.ServerQuery{}
@@ -23,9 +22,6 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 	veryOld = false
 
 	t := time.Now()
-
-	r := redisPool.Get()
-	defer r.Close()
 
 	var err error
 	var conn *mcquery.Connection
@@ -41,8 +37,7 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			}
 
 			if isFatal {
-				r.Do("SREM", "serverquery", serverAddr)
-				r.Do("DEL", "query:"+serverAddr)
+				queryMap.Delete(serverAddr)
 
 				status.Status = "error"
 				status.Error = "invalid hostname or port"
@@ -57,8 +52,6 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 			status.LastUpdated = strconv.FormatInt(time.Now().Unix(), 10)
 		}
 	}
-
-	r.Do("SADD", "serverquery", serverAddr)
 
 	var query *mcquery.Stat
 	if online {
@@ -103,57 +96,25 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 
 	status.Duration = diff.Nanoseconds()
 
-	data, err := json.Marshal(status)
-	if err != nil {
-		status.Status = "error"
-		status.Error = "internal server error (unable to jsonify server status)"
-		raven.CaptureErrorAndWait(err, nil)
-	}
+	queryMap.Set(serverAddr, status)
 
-	_, err = r.Do("SETEX", "query:"+serverAddr, 6*60*60, string(data))
-
-	if err != nil {
-		status.Status = "error"
-		status.Error = "internal server error (unable to save json to redis)"
-		raven.CaptureErrorAndWait(err, nil)
-	}
-
-	if veryOld || status.LastOnline == "" {
-		r.Do("SREM", "serverquery", serverAddr)
-		r.Do("DEL", "query:"+serverAddr)
+	if veryOld {
+		queryMap.Delete(serverAddr)
 	}
 
 	return status
 }
 
-func getServerQueryFromRedis(serverAddr string) *types.ServerQuery {
-	r := redisPool.Get()
-	resp, err := redis.String(r.Do("GET", "query:"+serverAddr))
-	r.Close()
-
-	if err != nil {
-		status := updateQuery(serverAddr)
-
-		return status
+func getQueryFromCacheOrUpdate(serverAddr string) *types.ServerQuery {
+	if status, ok := pingMap.GetOK(serverAddr); ok {
+		return status.(*types.ServerQuery)
 	}
 
-	var status types.ServerQuery
-	err = json.Unmarshal([]byte(resp), &status)
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-		return &types.ServerQuery{
-			Status: "error",
-			Error:  "internal server error (error loading json from redis)",
-		}
-	}
-
-	return &status
+	return updateQuery(serverAddr)
 }
 
 func respondServerQuery(c *gin.Context) {
 	c.Request.ParseForm()
-
-	var serverAddr string
 
 	ip := c.Request.Form.Get("ip")
 	port := c.Request.Form.Get("port")
@@ -167,11 +128,13 @@ func respondServerQuery(c *gin.Context) {
 		return
 	}
 
+	var serverAddr string
+
 	if port == "" {
 		serverAddr = ip + ":25565"
 	} else {
 		serverAddr = ip + ":" + port
 	}
 
-	c.JSON(http.StatusOK, getServerQueryFromRedis(serverAddr))
+	c.JSON(http.StatusOK, getQueryFromCacheOrUpdate(serverAddr))
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"github.com/OneOfOne/cmap"
 	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,9 @@ type Config struct {
 var redisPool *redis.Pool
 
 var enqueuer *work.Enqueuer
+
+var pingMap *cmap.CMap
+var queryMap *cmap.CMap
 
 func loadConfig(path string) *Config {
 	file, err := ioutil.ReadFile(path)
@@ -61,7 +65,7 @@ func generateConfig(path string) {
 	}
 }
 
-var fatalServerErrors []string = []string{
+var fatalServerErrors = []string{
 	"no such host",
 	"no route",
 	"unknown port",
@@ -70,26 +74,17 @@ var fatalServerErrors []string = []string{
 }
 
 func updateServers() {
-	r := redisPool.Get()
+	pingMap.ForEachLocked(func(key, _ interface{}) bool {
+		enqueuer.Enqueue("status", work.Q{"serverAddr": key.(string)})
 
-	pings, err := redis.Strings(r.Do("SMEMBERS", "serverping"))
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-	}
-	queries, err := redis.Strings(r.Do("SMEMBERS", "serverquery"))
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-	}
+		return true
+	})
 
-	r.Close()
+	queryMap.ForEachLocked(func(key, _ interface{}) bool {
+		enqueuer.Enqueue("query", work.Q{"serverAddr": key.(string)})
 
-	for _, server := range pings {
-		enqueuer.EnqueueUnique("status", work.Q{"serverAddr": server})
-	}
-
-	for _, server := range queries {
-		enqueuer.EnqueueUnique("query", work.Q{"serverAddr": server})
-	}
+		return true
+	})
 }
 
 type JobCtx struct{}
@@ -151,13 +146,17 @@ func main() {
 	raven.SetDSN(cfg.SentryDSN)
 
 	redisPool = &redis.Pool{
-		MaxActive: 750,
-		MaxIdle:   250,
-		Wait:      true,
+		MaxActive:   200,
+		MaxIdle:     100,
+		Wait:        true,
+		IdleTimeout: 60 * time.Second,
 		Dial: func() (redis.Conn, error) {
 			return redis.Dial("tcp", cfg.RedisHost)
 		},
 	}
+
+	pingMap = cmap.New()
+	queryMap = cmap.New()
 
 	enqueuer = work.NewEnqueuer("mcapi", redisPool)
 
@@ -172,7 +171,7 @@ func main() {
 
 	updateServers()
 	go func() {
-		for _ = range time.Tick(5 * time.Minute) {
+		for range time.Tick(5 * time.Minute) {
 			updateServers()
 		}
 	}()
@@ -197,10 +196,6 @@ func main() {
 
 	router.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{})
-	})
-
-	router.GET("/hi", func(c *gin.Context) {
-		c.String(http.StatusOK, "Hello :3")
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
