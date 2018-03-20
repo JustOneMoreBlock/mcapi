@@ -218,6 +218,10 @@ func main() {
 		c.HTML(http.StatusOK, "index.html", gin.H{})
 	})
 
+	router.GET("/health", func (c *gin.Context) {
+		c.String(http.StatusOK, ":3")
+	})
+
 	router.GET("/stats", func(c *gin.Context) {
 		r := redisPool.Get()
 		stats, err := redis.Int64(r.Do("GET", "mcapi"))
