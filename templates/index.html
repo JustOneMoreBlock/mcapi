@@ -1,225 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Minecraft API</title>
-  <meta name="viewport" content="width=device-width">
-  <meta name="description" content="A simple way to check the status of a Minecraft server and display the results along with numbers of players online on your website.">
-  <meta name="theme-color" content="#6AFF42">
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.7/journal/bootstrap.min.css">
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css">
-  <script>if (window.location.hostname === "api.syfaro.net") window.location = "https://mcapi.us";</script>
+    <meta charset="utf-8">
+    <title>Minecraft API</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description"
+          content="A simple way to check the status of a Minecraft server and display the results along with numbers of players online on your website.">
+    <meta name="theme-color" content="#6AFF42">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootswatch/4.0.0/journal/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css">
+    <script>if (window.location.hostname === "api.syfaro.net") window.location = "https://mcapi.us";</script>
 
-  <style>
-    body {
-      position: relative;
-      margin-top: 25px;
-      font-variant-ligatures: common-ligatures discretionary-ligatures;
-    }
-
-    #home .container {
-      margin-top: 25px;
-    }
-
-    .row p {
-      font-size: 1.5em;
-    }
-  </style>
+    <style>
+        body {
+            font-variant-ligatures: common-ligatures discretionary-ligatures;
+        }
+    </style>
 </head>
-<body data-spy="scroll" data-target=".navbar" data-offset="100">
-  <div class="navbar navbar-default navbar-fixed-top">
+<body>
+<div class="navbar navbar-expand-sm navbar-light bg-light">
     <div class="container">
-      <div class="navbar-header">
-        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target=".collapse">
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
+        <a class="navbar-brand" href="/">Minecraft API</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target=".navbar-content">
+            <span class="navbar-toggler-icon"></span>
         </button>
 
-        <a class="navbar-brand" href="/">Minecraft API</a>
-      </div>
+        <div class="collapse navbar-collapse navbar-content">
+            <ul class="navbar-nav mr-auto">
+                <li class="navbar-item">
+                    <a class="nav-link" href="#home">Home</a>
+                </li>
 
-      <div class="collapse navbar-collapse">
-        <ul class="nav navbar-nav">
-          <li class="active"><a href="#home">Home</a></li>
-          <li><a href="#usage">Usage</a></li>
-        </ul>
-      </div>
+                <li class="navbar-item">
+                    <a class="nav-link" href="#usage">Usage</a>
+                </li>
+            </ul>
+        </div>
     </div>
-  </div>
+</div>
 
-  <div class="jumbotron" id="home">
+<div class="jumbotron" id="home">
     <div class="container">
-      <img src="/scripts/logo.png" srcset="/scripts/logo.png 1x, /scripts/logo@2x.png 2x" class="img-responsive">
+        <img src="/scripts/logo.png" srcset="/scripts/logo.png 1x, /scripts/logo@2x.png 2x" class="img-fluid">
 
-      <p>A simple way to check the status of a server, along with the number of players currently online.</p>
-      <p>We've currently gotten <span class="stats stats-total"></span> requests!</p>
+        <p class="lead">A simple way to get the status of or query a Minecraft server.</p>
+        <p>We've currently gotten <span class="stats stats-total"></span> requests!</p>
 
-      <p>
-        Having issues? <a href="https://twitter.com/Syfaro">Tweet me</a> if anything is broken!
-      </p>
+        <p>
+            Having issues? <a href="https://twitter.com/Syfaro">Tweet me</a> if anything is broken.
+        </p>
 
-      <p class="hidden-xs hidden-sm"><a class="btn btn-primary btn-lg" href="#usage">Get started</a></p>
+        <p class="hidden-xs hidden-sm"><a class="btn btn-primary btn-lg" href="#usage">Get started</a></p>
     </div>
-  </div>
+</div>
 
-  <div class="container">
+<div class="container">
     <div class="row" id="usage">
-      <div class="col-sm-12 text-center">
-        <h2>Usage</h2>
-      </div>
+        <div class="col-sm-12 text-center">
+            <h2>Usage</h2>
+        </div>
 
-      <div class="col-sm-12">
-        <p>
-          All requests should be sent to <code>/server/status</code>. You may add two parameters, an <code>ip</code> and a <code>port</code>. JSONP is not supported as CORS is enabled.
-        </p>
+        <div class="col-sm-12">
+            <p>
+                All requests should be sent to <code>/server/status</code> or <code>/server/query</code>.
+                You may add two parameters, an <code>ip</code> and a <code>port</code>.
+                JSONP is not supported as CORS is enabled.
+            </p>
 
-        <p>
-          Please do not send more than one request per client per minute, data is cached server side for five minutes!
-        </p>
+            <p>
+                Please do not send more than one request per client per minute as data is cached server side for five
+                minutes.
+            </p>
 
-        <p>
-          An example request would look like <code>https://mcapi.us/server/status?ip=s.nerd.nu</code>. If you are using a non-standard 25565 port, you may include the port too, like this: <code>https://mcapi.us/server/status?ip=s.nerd.nu&port=25565</code>.
-        </p>
+            <p>
+                An example request would look like <code>https://mcapi.us/server/status?ip=s.nerd.nu</code>. If you are
+                using a non-standard 25565 port, you may include the port too, like this: <code>https://mcapi.us/server/status?ip=s.nerd.nu&port=25565</code>.
+            </p>
 
-        <p class="hidden-xs">
-          Alternatively, you can use our JavaScript library. Here's a small example of it in use.
+            <p class="d-none d-sm-block">
+                Alternatively, you can use our JavaScript library. Here's a small example of it in use.
+            </p>
 
-          <pre><code class="html">&lt;script src="https://mcapi.us/scripts/minecraft.js"&gt;&lt;/script&gt;
-&lt;div class="server-status"&gt;
-  My awesome server is currently &lt;span class="server-online"&gt;&lt;/span&gt;!
-&lt;/div&gt;
-&lt;script&gt;
-  MinecraftAPI.getServerStatus('s.nerd.nu', {
-    port: 25565 // optional, only if you need a custom port
-  }, function (err, status) {
-    if (err) {
-      return document.querySelector('.server-status').innerHTML = 'Error loading status';
-    }
+            <pre class="d-none d-sm-block"><code class="html">&lt;script src="https://mcapi.us/scripts/minecraft.js"&gt;&lt;/script&gt;
+    &lt;div class="server-status"&gt;
+      My awesome server is currently &lt;span class="server-online"&gt;&lt;/span&gt;!
+    &lt;/div&gt;
+    &lt;script&gt;
+      MinecraftAPI.getServerStatus('s.nerd.nu', {
+        port: 25565 // optional, only if you need a custom port
+      }, function (err, status) {
+        if (err) {
+          return document.querySelector('.server-status').innerHTML = 'Error loading status';
+        }
 
-    // you can change these to your own message!
-    document.querySelector('.server-online').innerHTML = status.online ? 'up' : 'down';
-  });
-&lt;/script&gt;</code></pre>
-        </p>
+        // you can change these to your own message!
+        document.querySelector('.server-online').innerHTML = status.online ? 'up' : 'down';
+      });
+    &lt;/script&gt;</code></pre>
 
-        <p>
-          A response from this might look the following (live response data):
+            <p>
+                A response from this might look the following (live response data):
+            </p>
 
-          <pre><code class="json" id="live-server-response"></code></pre>
-        </p>
+            <pre><code class="json" id="live-server-response"></code></pre>
 
-        <p>
-          <table class="table table-hover table-bordered table-responsive">
-            <thead>
-              <tr>
-                <th width="10%">name</th>
-                <th>description</th>
-                <th width="15%">example</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>status</td>
-                <td>the status of the request, typically success unless a poor request is made or my server is having internal troubles. if this is not success, assume the data is bad and should not be used.</td>
-                <td>success</td>
-              </tr>
-              <tr>
-                <td>online</td>
-                <td>if the server is online or not</td>
-                <td>true</td>
-              </tr>
-              <tr>
-                <td>motd</td>
-                <td>the server description, also known as the message of the day. some strange formatting may be in this, there are various libraries available for formatting this.</td>
-                <td>My Minecraft server</td>
-              </tr>
-              <tr>
-                <td>error</td>
-                <td>error message from the request. if you forget the IP the error will be <code>missing data</code>. if it is an invalid IP, the error will be <code>invalid hostname or port</code>. if an error starts with <code>internal server error</code>, it means something is wrong with my server. empty means no error.
-                <td></td>
-              </tr>
-              <tr>
-                <td>players.max</td>
-                <td>number of players that the server will allow</td>
-                <td>20</td>
-              </tr>
-              <tr>
-                <td>players.now</td>
-                <td>number of players currently online</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>server.name</td>
-                <td>current server version name</td>
-                <td>Spigot 1.8.3</td>
-              </tr>
-              <tr>
-                <td>server.protocol</td>
-                <td>server version protocol</td>
-                <td>47</td>
-              </tr>
-              <tr>
-                <td>last_online</td>
-                <td>the date the server was last recorded online. if empty, it has never been online. it is a unix timestamp in string form. if this has the same value as <code>last_updated</code>, it means that it is currently online.</td>
-                <td>1431985691</td>
-              </tr>
-              <tr>
-                <td>last_updated</td>
-                <td>the date the status of the server was last updated at. it updates every five minutes, so you may send requests as soon as it has expired.</td>
-                <td>1431985691</td>
-              </tr>
-              <tr>
-                <td>duration</td>
-                <td>the time it took to process the original request, in nanoseconds.</td>
-                <td>143439400</td>
-              </tr>
-            </tbody>
-          </table>
-        </p>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th width="10%">name</th>
+                        <th>description</th>
+                        <th width="15%">example</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <th>status</th>
+                        <td>the status of the request, typically success unless a poor request is made or my server is
+                            having internal troubles. if this is not success, assume the data is bad and should not be used.
+                        </td>
+                        <td>success</td>
+                    </tr>
+                    <tr>
+                        <th>online</th>
+                        <td>if the server is online or not</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <th>motd</th>
+                        <td>the server description, also known as the message of the day. some strange formatting may be in
+                            this, there are various libraries available for formatting this.
+                        </td>
+                        <td>My Minecraft server</td>
+                    </tr>
+                    <tr>
+                        <th>error</th>
+                        <td>error message from the request. if you forget the IP the error will be <code>missing data</code>.
+                            if it is an invalid IP, the error will be <code>invalid hostname or port</code>. if an error
+                            starts with <code>internal server error</code>, it means something is wrong with my server.
+                            empty means no error.
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <th>players.max</th>
+                        <td>number of players that the server will allow</td>
+                        <td>20</td>
+                    </tr>
+                    <tr>
+                        <th>players.now</th>
+                        <td>number of players currently online</td>
+                        <td>2</td>
+                    </tr>
+                    <tr>
+                        <th>server.name</th>
+                        <td>current server version name</td>
+                        <td>Spigot 1.8.3</td>
+                    </tr>
+                    <tr>
+                        <th>server.protocol</th>
+                        <td>server version protocol</td>
+                        <td>47</td>
+                    </tr>
+                    <tr>
+                        <th>last_online</th>
+                        <td>the date the server was last recorded online. if empty, it has never been online. it is a unix
+                            timestamp in string form. if this has the same value as <code>last_updated</code>, it means that
+                            it is currently online.
+                        </td>
+                        <td>1431985691</td>
+                    </tr>
+                    <tr>
+                        <th>last_updated</th>
+                        <td>the date the status of the server was last updated at. it updates every five minutes, so you may
+                            send requests as soon as it has expired.
+                        </td>
+                        <td>1431985691</td>
+                    </tr>
+                    <tr>
+                        <th>duration</th>
+                        <td>the time it took to process the original request, in nanoseconds.</td>
+                        <td>143439400</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
 
-        <p>
-          If you're looking for more information about the server, such as what plugins are installed or the name of the players currently online, you can try the <code>/server/query</code> endpoint instead. It takes the same parameters, and can be used with the provided JavaScript library by calling <code>MinecraftAPI.getServerQuery</code> instead.
-        </p>
+            <p>
+                If you're looking for more information about the server, such as what plugins are installed or the name
+                of the players currently online, you can try the <code>/server/query</code> endpoint instead. It takes
+                the same parameters, and can be used with the provided JavaScript library by calling
+                <code>MinecraftAPI.getServerQuery</code> instead.
+            </p>
 
-        <p>
-          If something doesn't work or you're interested in a new feature, mention me on <a href="https://twitter.com/Syfaro">Twitter</a> or <a href="mailto:syfaro@huefox.com">send me an email</a>!
-        </p>
+            <p>
+                However, query must be enabled on the server for this to work.
+            </p>
 
-        <p>
-          This site costs over $70 a year to run. Please consider helping at <a href="https://ko-fi.com/syfaro">ko-fi</a>.
-        </p>
-      </div>
+            <p>
+                If something doesn't work or you're interested in a new feature, mention me on
+                <a href="https://twitter.com/Syfaro">Twitter</a> or <a href="mailto:syfaro@huefox.com">send me an
+                email</a>.
+            </p>
+
+            <p>
+                This site costs over $70 a year to run. Please consider helping at <a href="https://ko-fi.com/syfaro">ko-fi</a>.
+            </p>
+        </div>
     </div>
-  </div>
+</div>
 
-  <div style="margin-bottom: 10px"></div>
-
-  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
-  <script>
-  (function () {
-    'use strict';
-
-    hljs.initHighlightingOnLoad();
-
-    const loadStats = () =>
-      fetch(`/stats?${Date.now()}`).then(resp => resp.json()).then(resp => {
-        Array.from(document.querySelectorAll('.stats.stats-total')).forEach(item => item.innerHTML = resp.stats);
-        setTimeout(loadStats, 1000);
-      });
-
-    const loadServer = (ip) =>
-      fetch(`/server/status?ip=${ip}`).then(resp => resp.json()).then(resp => {
-        document.querySelector('#live-server-response').innerHTML = JSON.stringify(resp, null, '  ');
-
-        Array.from(document.querySelectorAll('pre code')).forEach(item => hljs.highlightBlock(item));
-      });
-
-    loadStats();
-    loadServer('c.nerd.nu');
-  }());
-  </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fetch/2.0.3/fetch.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script src="/scripts/site.min.js"></script>
 </body>
 </html>
