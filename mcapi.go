@@ -188,7 +188,7 @@ func main() {
 
 		updateServers()
 		go func() {
-			for range time.Tick(time.Minute) {
+			for range time.Tick(time.Minute * 5) {
 				updateServers()
 			}
 		}()
