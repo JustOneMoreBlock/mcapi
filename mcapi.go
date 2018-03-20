@@ -15,6 +15,7 @@ import (
 	"github.com/OneOfOne/cmap/stringcmap"
 	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
+	"github.com/gin-contrib/sentry"
 	"github.com/gin-gonic/gin"
 	"github.com/gocraft/work"
 	"github.com/syfaro/mcapi/types"
@@ -99,33 +100,40 @@ func jobMiddleware(job *work.Job, next work.NextMiddlewareFunc) error {
 	return next()
 }
 
-func jobUpdateQuery(job *work.Job) error {
-	if _, ok := job.Args["serverAddr"]; ok {
-		serverAddr := job.ArgString("serverAddr")
+func jobUpdate(job *work.Job) error {
+	e := make(chan error, 1)
 
-		res := updateQuery(serverAddr)
-		if res.Error != "" {
-			return errors.New(res.Error)
+	go func() {
+		if _, ok := job.Args["serverAddr"]; ok {
+			serverAddr := job.ArgString("serverAddr")
+
+			if job.Name == "query" {
+				res := updateQuery(serverAddr)
+
+				if res.Error != "" {
+					e <- errors.New(res.Error)
+				} else {
+					e <- nil
+				}
+			} else if job.Name == "status" {
+				res := updatePing(serverAddr)
+
+				if res.Error != "" {
+					e <- errors.New(res.Error)
+				} else {
+					e <- nil
+				}
+			}
 		} else {
-			return nil
+			e <- errors.New("missing server address")
 		}
-	} else {
-		return errors.New("missing server address")
-	}
-}
+	}()
 
-func jobUpdateStatus(job *work.Job) error {
-	if _, ok := job.Args["serverAddr"]; ok {
-		serverAddr := job.ArgString("serverAddr")
-
-		res := updatePing(serverAddr)
-		if res.Error != "" {
-			return errors.New(res.Error)
-		} else {
-			return nil
-		}
-	} else {
-		return errors.New("missing server address")
+	select {
+	case res := <-e:
+		return res
+	case <-time.After(5 * time.Second):
+		return errors.New("job took longer than 5 seconds")
 	}
 }
 
@@ -169,20 +177,20 @@ func main() {
 
 	pool.Middleware(jobMiddleware)
 
-	pool.Job("query", jobUpdateQuery)
-	pool.Job("status", jobUpdateStatus)
+	pool.Job("query", jobUpdate)
+	pool.Job("status", jobUpdate)
 
 	go pool.Start()
 
 	updateServers()
 	go func() {
-		for range time.Tick(5 * time.Minute) {
+		for range time.Tick(time.Minute) {
 			updateServers()
 		}
 	}()
 
 	router := gin.New()
-	router.Use(gin.Recovery())
+	router.Use(sentry.Recovery(raven.DefaultClient, false))
 
 	router.Static("/scripts", cfg.StaticFiles)
 	router.LoadHTMLFiles(cfg.TemplateFile)
