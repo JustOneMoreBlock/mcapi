@@ -221,6 +221,15 @@ func main() {
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
+		if redisPool == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"stats": -1,
+				"time": time.Now().UnixNano(),
+			})
+
+			return
+		}
+
 		r := redisPool.Get()
 		stats, err := redis.Int64(r.Do("GET", "mcapi"))
 		r.Close()
