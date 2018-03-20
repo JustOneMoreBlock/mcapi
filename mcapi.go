@@ -140,6 +140,7 @@ func jobUpdate(job *work.Job) error {
 func main() {
 	configFile := flag.String("config", "config.json", "path to configuration file")
 	genConfig := flag.Bool("gencfg", false, "generate configuration file with sane defaults")
+	fetch := flag.Bool("fetch", true, "enable fetching server data")
 
 	flag.Parse()
 
@@ -158,36 +159,42 @@ func main() {
 
 	raven.SetDSN(cfg.SentryDSN)
 
-	redisPool = &redis.Pool{
-		MaxActive:   200,
-		MaxIdle:     100,
-		Wait:        true,
-		IdleTimeout: 60 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", cfg.RedisHost)
-		},
-	}
-
 	pingMap = stringcmap.New()
 	queryMap = stringcmap.New()
 
-	enqueuer = work.NewEnqueuer("mcapi", redisPool)
+	if *fetch {
+		log.Println("Fetching enabled.")
 
-	pool := work.NewWorkerPool(JobCtx{}, 50, "mcapi", redisPool)
-
-	pool.Middleware(jobMiddleware)
-
-	pool.Job("query", jobUpdate)
-	pool.Job("status", jobUpdate)
-
-	go pool.Start()
-
-	updateServers()
-	go func() {
-		for range time.Tick(time.Minute) {
-			updateServers()
+		redisPool = &redis.Pool{
+			MaxActive:   200,
+			MaxIdle:     100,
+			Wait:        true,
+			IdleTimeout: 60 * time.Second,
+			Dial: func() (redis.Conn, error) {
+				return redis.Dial("tcp", cfg.RedisHost)
+			},
 		}
-	}()
+
+		enqueuer = work.NewEnqueuer("mcapi", redisPool)
+
+		pool := work.NewWorkerPool(JobCtx{}, 50, "mcapi", redisPool)
+
+		pool.Middleware(jobMiddleware)
+
+		pool.Job("query", jobUpdate)
+		pool.Job("status", jobUpdate)
+
+		go pool.Start()
+
+		updateServers()
+		go func() {
+			for range time.Tick(time.Minute) {
+				updateServers()
+			}
+		}()
+	} else {
+		log.Println("Fetching is NOT enabled.")
+	}
 
 	router := gin.New()
 	router.Use(sentry.Recovery(raven.DefaultClient, false))
@@ -202,9 +209,11 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 		c.Writer.Header().Set("Cache-Control", "max-age=300, public, s-maxage=300")
 
-		r := redisPool.Get()
-		r.Do("INCR", "mcapi")
-		r.Close()
+		if redisPool != nil {
+			r := redisPool.Get()
+			r.Do("INCR", "mcapi")
+			r.Close()
+		}
 	})
 
 	router.GET("/", func(c *gin.Context) {

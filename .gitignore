@@ -8,3 +8,6 @@ client
 
 # logs
 *.log
+
+# IDE configuration
+.idea/
