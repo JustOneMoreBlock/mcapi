@@ -162,18 +162,18 @@ func main() {
 	pingMap = stringcmap.New()
 	queryMap = stringcmap.New()
 
+	redisPool = &redis.Pool{
+		MaxActive:   200,
+		MaxIdle:     100,
+		Wait:        true,
+		IdleTimeout: 60 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", cfg.RedisHost)
+		},
+	}
+
 	if *fetch {
 		log.Println("Fetching enabled.")
-
-		redisPool = &redis.Pool{
-			MaxActive:   200,
-			MaxIdle:     100,
-			Wait:        true,
-			IdleTimeout: 60 * time.Second,
-			Dial: func() (redis.Conn, error) {
-				return redis.Dial("tcp", cfg.RedisHost)
-			},
-		}
 
 		enqueuer = work.NewEnqueuer("mcapi", redisPool)
 
@@ -209,11 +209,9 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 		c.Writer.Header().Set("Cache-Control", "max-age=300, public, s-maxage=300")
 
-		if redisPool != nil {
-			r := redisPool.Get()
-			r.Do("INCR", "mcapi")
-			r.Close()
-		}
+		r := redisPool.Get()
+		r.Do("INCR", "mcapi")
+		r.Close()
 	})
 
 	router.GET("/", func(c *gin.Context) {
@@ -221,15 +219,6 @@ func main() {
 	})
 
 	router.GET("/stats", func(c *gin.Context) {
-		if redisPool == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"stats": -1,
-				"time": time.Now().UnixNano(),
-			})
-
-			return
-		}
-
 		r := redisPool.Get()
 		stats, err := redis.Int64(r.Do("GET", "mcapi"))
 		r.Close()
