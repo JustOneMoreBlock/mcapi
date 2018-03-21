@@ -240,6 +240,8 @@ func main() {
 	router.GET("/server/status", respondServerStatus)
 	router.GET("/minecraft/1.3/server/status", respondServerStatus)
 
+	router.GET("/server/image", respondServerImage)
+
 	router.GET("/server/query", respondServerQuery)
 	router.GET("/minecraft/1.3/server/query", respondServerQuery)
 
