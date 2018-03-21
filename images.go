@@ -5,6 +5,8 @@ import (
 	"image"
 	_ "image/png"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/fogleman/gg"
 	"github.com/gin-gonic/gin"
@@ -53,7 +55,7 @@ func respondServerImage(c *gin.Context) {
 
 	dc := gg.NewContext(imageWidth, imageHeight)
 
-	dc.DrawImage(block, (imageHeight-height)/2, 15)
+	dc.DrawImage(block, ((imageHeight-height)/2)-5, 10)
 
 	dc.SetFontFace(inconsolata.Regular8x16)
 	if theme == "dark" {
@@ -62,9 +64,9 @@ func respondServerImage(c *gin.Context) {
 		dc.SetRGB(0, 0, 0)
 	}
 	_, tH := dc.MeasureString(serverDisp)
-	dc.DrawString(serverDisp, 70, 18+tH)
+	dc.DrawString(serverDisp, 65, 13+tH)
 
-	lastHeight := 18 + tH
+	lastHeight := 13 + tH
 
 	var online string
 
@@ -75,18 +77,29 @@ func respondServerImage(c *gin.Context) {
 	}
 
 	tW, tH := dc.MeasureString(online)
-	dc.DrawString(online, 70, lastHeight+tH+2)
+	dc.DrawString(online, 65, lastHeight+tH+2)
 
 	lastHeight += tH + 2
 
 	if status.Online {
 		msg := fmt.Sprintf("%d/%d players", status.Players.Now, status.Players.Max)
 		_, tH = dc.MeasureString(msg)
-		dc.DrawString(msg, 70+tW+5, lastHeight)
+		dc.DrawString(msg, 65+tW+5, lastHeight)
 	}
 
-	tW, tH = dc.MeasureString("mcapi.us")
-	dc.DrawString("mcapi.us", imageWidth-tW-2, imageHeight-2)
+	i, _ := strconv.ParseInt(status.LastUpdated, 10, 64)
+	last := time.Unix(i, 0)
+	minutesAgo := int(time.Now().Sub(last).Minutes())
+
+	plural := ""
+	if minutesAgo != 1 {
+		plural = "s"
+	}
+
+	msg := fmt.Sprintf("Updated %d min%s ago · mcapi.us", minutesAgo, plural)
+
+	tW, tH = dc.MeasureString(msg)
+	dc.DrawString(msg, imageWidth-tW-2, imageHeight-4)
 
 	dc.EncodePNG(c.Writer)
 }
