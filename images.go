@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	_ "image/png"
-	"os"
 	"strconv"
 	"time"
 
@@ -14,8 +13,14 @@ import (
 )
 
 const (
-	imageWidth  = 300
-	imageHeight = 75
+	imageWidth  = 325
+	imageHeight = 64
+)
+
+const (
+	imageBlockWidth = 64
+	fromImage = 4
+	offsetText = float64(imageBlockWidth + fromImage)
 )
 
 func respondServerImage(c *gin.Context) {
@@ -23,6 +28,7 @@ func respondServerImage(c *gin.Context) {
 
 	ip := c.Request.Form.Get("ip")
 	port := c.Request.Form.Get("port")
+	title := c.Request.Form.Get("title")
 	theme := c.Request.Form.Get("theme")
 
 	var serverAddr string
@@ -36,26 +42,38 @@ func respondServerImage(c *gin.Context) {
 		serverDisp = serverAddr
 	}
 
+	if title != "" {
+		serverDisp = title
+	}
+
 	status := getStatusFromCacheOrUpdate(serverAddr)
 
-	blockFile, err := os.Open("files/grass_sm.png")
-	if err != nil {
-		c.Error(err)
-		return
+	var imgToDraw image.Image
+
+	if status.Favicon == "" {
+		img, err := gg.LoadPNG("files/grass_sm.png")
+		if err != nil {
+			c.Error(err)
+			return
+		}
+
+		imgToDraw = img
+	} else {
+		img, err := status.Image()
+		if err != nil {
+			c.Error(err)
+			return
+		}
+
+		imgToDraw = img
 	}
 
-	block, _, err := image.Decode(blockFile)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	bounds := block.Bounds()
-	height, _ := bounds.Dy(), bounds.Dx()
+	bounds := imgToDraw.Bounds()
+	height, width := bounds.Dy(), bounds.Dx()
 
 	dc := gg.NewContext(imageWidth, imageHeight)
 
-	dc.DrawImage(block, ((imageHeight-height)/2)-5, 10)
+	dc.DrawImage(imgToDraw, (imageBlockWidth-width)/2, (imageHeight-height)/2)
 
 	dc.SetFontFace(inconsolata.Regular8x16)
 	if theme == "dark" {
@@ -64,9 +82,9 @@ func respondServerImage(c *gin.Context) {
 		dc.SetRGB(0, 0, 0)
 	}
 	_, tH := dc.MeasureString(serverDisp)
-	dc.DrawString(serverDisp, 65, 13+tH)
+	dc.DrawString(serverDisp, offsetText, tH)
 
-	lastHeight := 13 + tH
+	lastHeight := 1 + tH
 
 	var online string
 
@@ -77,14 +95,14 @@ func respondServerImage(c *gin.Context) {
 	}
 
 	tW, tH := dc.MeasureString(online)
-	dc.DrawString(online, 65, lastHeight+tH+2)
+	dc.DrawString(online, offsetText, lastHeight+tH+2)
 
 	lastHeight += tH + 2
 
 	if status.Online {
 		msg := fmt.Sprintf("%d/%d players", status.Players.Now, status.Players.Max)
 		_, tH = dc.MeasureString(msg)
-		dc.DrawString(msg, 65+tW+5, lastHeight)
+		dc.DrawString(msg, float64(width+fromImage*2)+tW, lastHeight)
 	}
 
 	i, _ := strconv.ParseInt(status.LastUpdated, 10, 64)
@@ -98,8 +116,7 @@ func respondServerImage(c *gin.Context) {
 
 	msg := fmt.Sprintf("Updated %d min%s ago · mcapi.us", minutesAgo, plural)
 
-	tW, tH = dc.MeasureString(msg)
-	dc.DrawString(msg, imageWidth-tW-2, imageHeight-4)
+	dc.DrawString(msg, offsetText, imageHeight-4)
 
 	dc.EncodePNG(c.Writer)
 }

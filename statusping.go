@@ -122,6 +122,7 @@ func updatePing(serverAddr string) *types.ServerStatus {
 			log.Printf("%v", pong.Description)
 			status.Motd = ""
 		}
+		status.Favicon = pong.FavIcon
 		status.Players.Max = pong.Players.Max
 		status.Players.Now = pong.Players.Online
 		status.Server.Name = pong.Version.Name
