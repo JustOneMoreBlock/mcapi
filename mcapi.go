@@ -78,34 +78,26 @@ func updateServers() {
 		done := make(chan bool, 1)
 
 		limit.Execute(func() {
-			updatePing(key)
-
+			updatePingTimeout(key)
 			done <- true
 		})
 
-		select {
-		case <-done:
-			return true
-		case <-time.After(5 * time.Second):
-			return true
-		}
+		<-done
+
+		return true
 	})
 
 	queryMap.ForEachLocked(func(key string, _ interface{}) bool {
 		done := make(chan bool, 1)
 
 		limit.Execute(func() {
-			updateQuery(key)
-
+			updateQueryTimeout(key)
 			done <- true
 		})
 
-		select {
-		case <-done:
-			return true
-		case <-time.After(5 * time.Second):
-			return true
-		}
+		<-done
+
+		return true
 	})
 }
 
