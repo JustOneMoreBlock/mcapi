@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -13,26 +12,20 @@ import (
 	"time"
 
 	"github.com/OneOfOne/cmap/stringcmap"
-	"github.com/garyburd/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-contrib/sentry"
 	"github.com/gin-gonic/gin"
-	"github.com/gocraft/work"
+	"github.com/korovkin/limiter"
 	"github.com/syfaro/mcapi/types"
 )
 
 type Config struct {
-	HttpAppHost  string
-	RedisHost    string
+	HTTPAppHost  string
 	StaticFiles  string
 	TemplateFile string
 	SentryDSN    string
 	AdminKey     string
 }
-
-var redisPool *redis.Pool
-
-var enqueuer *work.Enqueuer
 
 var pingMap *stringcmap.CMap
 var queryMap *stringcmap.CMap
@@ -53,8 +46,7 @@ func loadConfig(path string) *Config {
 
 func generateConfig(path string) {
 	cfg := &Config{
-		HttpAppHost:  ":8080",
-		RedisHost:    ":6379",
+		HTTPAppHost:  ":8080",
 		StaticFiles:  "./scripts",
 		TemplateFile: "./templates/index.html",
 		AdminKey:     "your_secret",
@@ -80,61 +72,41 @@ var fatalServerErrors = []string{
 }
 
 func updateServers() {
-	pingMap.ForEachLocked(func(key string, _ interface{}) bool {
-		enqueuer.Enqueue("status", work.Q{"serverAddr": key})
+	limit := limiter.NewConcurrencyLimiter(50)
 
-		return true
+	pingMap.ForEachLocked(func(key string, _ interface{}) bool {
+		done := make(chan bool, 1)
+
+		limit.Execute(func() {
+			updatePing(key)
+
+			done <- true
+		})
+
+		select {
+		case <-done:
+			return true
+		case <-time.After(5 * time.Second):
+			return true
+		}
 	})
 
 	queryMap.ForEachLocked(func(key string, _ interface{}) bool {
-		enqueuer.Enqueue("query", work.Q{"serverAddr": key})
+		done := make(chan bool, 1)
 
-		return true
-	})
-}
+		limit.Execute(func() {
+			updateQuery(key)
 
-type JobCtx struct{}
+			done <- true
+		})
 
-func jobMiddleware(job *work.Job, next work.NextMiddlewareFunc) error {
-	log.Printf("Running %s: %+v\n", job.Name, job.Args)
-	return next()
-}
-
-func jobUpdate(job *work.Job) error {
-	e := make(chan error, 1)
-
-	go func() {
-		if _, ok := job.Args["serverAddr"]; ok {
-			serverAddr := job.ArgString("serverAddr")
-
-			if job.Name == "query" {
-				res := updateQuery(serverAddr)
-
-				if res.Error != "" {
-					e <- errors.New(res.Error)
-				} else {
-					e <- nil
-				}
-			} else if job.Name == "status" {
-				res := updatePing(serverAddr)
-
-				if res.Error != "" {
-					e <- errors.New(res.Error)
-				} else {
-					e <- nil
-				}
-			}
-		} else {
-			e <- errors.New("missing server address")
+		select {
+		case <-done:
+			return true
+		case <-time.After(5 * time.Second):
+			return true
 		}
-	}()
-
-	select {
-	case res := <-e:
-		return res
-	case <-time.After(5 * time.Second):
-		return errors.New("job took longer than 5 seconds")
-	}
+	})
 }
 
 func main() {
@@ -162,29 +134,8 @@ func main() {
 	pingMap = stringcmap.New()
 	queryMap = stringcmap.New()
 
-	redisPool = &redis.Pool{
-		MaxActive:   200,
-		MaxIdle:     100,
-		Wait:        true,
-		IdleTimeout: 60 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", cfg.RedisHost)
-		},
-	}
-
 	if *fetch {
 		log.Println("Fetching enabled.")
-
-		enqueuer = work.NewEnqueuer("mcapi", redisPool)
-
-		pool := work.NewWorkerPool(JobCtx{}, 50, "mcapi", redisPool)
-
-		pool.Middleware(jobMiddleware)
-
-		pool.Job("query", jobUpdate)
-		pool.Job("status", jobUpdate)
-
-		go pool.Start()
 
 		updateServers()
 		go func() {
@@ -208,34 +159,22 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 		c.Writer.Header().Set("Cache-Control", "max-age=300, public, s-maxage=300")
-
-		r := redisPool.Get()
-		r.Do("INCR", "mcapi")
-		r.Close()
 	})
 
 	router.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{})
 	})
 
-	router.GET("/health", func (c *gin.Context) {
+	router.GET("/health", func(c *gin.Context) {
 		c.String(http.StatusOK, ":3")
 	})
 
-	router.GET("/stats", func(c *gin.Context) {
-		r := redisPool.Get()
-		stats, err := redis.Int64(r.Do("GET", "mcapi"))
-		r.Close()
-
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"stats": stats,
-			"time":  time.Now().UnixNano(),
-		})
-	})
+	// router.GET("/stats", func(c *gin.Context) {
+	// 	c.JSON(http.StatusOK, gin.H{
+	// 		"stats": stats,
+	// 		"time":  time.Now().UnixNano(),
+	// 	})
+	// })
 
 	router.GET("/server/status", respondServerStatus)
 	router.GET("/minecraft/1.3/server/status", respondServerStatus)
@@ -301,5 +240,5 @@ func main() {
 		c.String(http.StatusOK, "Cleared items.")
 	})
 
-	router.Run(cfg.HttpAppHost)
+	router.Run(cfg.HTTPAppHost)
 }
