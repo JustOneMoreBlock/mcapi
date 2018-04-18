@@ -1,5 +1,12 @@
 package types
 
+import (
+	"encoding/base64"
+	"image"
+	_ "image/png"
+	"strings"
+)
+
 // ServerStatusPlayers contains information about the min and max numbers of players
 // As it is a ping request, it does not contain a list of players online.
 type ServerStatusPlayers struct {
@@ -28,10 +35,18 @@ type ServerStatus struct {
 	Motd          string              `json:"motd"`
 	MotdExtra     interface{}         `json:"motd_extra,omitempty"`
 	MotdFormatted string              `json:"motd_formatted,omitempty"`
+	Favicon       string              `json:"favicon,omitempty"`
 	Error         string              `json:"error"`
 	Players       ServerStatusPlayers `json:"players"`
 	Server        ServerStatusServer  `json:"server"`
 	LastOnline    string              `json:"last_online"`
 	LastUpdated   string              `json:"last_updated"`
 	Duration      int64               `json:"duration"`
+}
+
+func (s ServerStatus) Image() (image.Image, error) {
+	data := s.Favicon[strings.IndexByte(s.Favicon, ',')+1:]
+	reader := base64.NewDecoder(base64.StdEncoding, strings.NewReader(data))
+	img, _, err := image.Decode(reader)
+	return img, err
 }
