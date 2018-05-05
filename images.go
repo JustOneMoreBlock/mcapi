@@ -19,8 +19,8 @@ const (
 
 const (
 	imageBlockWidth = 64
-	fromImage = 4
-	offsetText = float64(imageBlockWidth + fromImage)
+	fromImage       = 4
+	offsetText      = float64(imageBlockWidth + fromImage)
 )
 
 func respondServerImage(c *gin.Context) {
@@ -46,7 +46,22 @@ func respondServerImage(c *gin.Context) {
 		serverDisp = title
 	}
 
-	status := getStatusFromCacheOrUpdate(serverAddr, c)
+	status := getStatusFromCacheOrUpdate(serverAddr, c, true)
+
+	if status == nil {
+		dc := gg.NewContext(imageWidth, imageHeight)
+
+		dc.SetFontFace(inconsolata.Regular8x16)
+		if theme == "dark" {
+			dc.SetRGB(1, 1, 1)
+		} else {
+			dc.SetRGB(0, 0, 0)
+		}
+
+		dc.DrawStringAnchored("Too many bad requests.", imageWidth/2, imageHeight/2, 0.5, 0.5)
+
+		dc.EncodePNG(c.Writer)
+	}
 
 	var imgToDraw image.Image
 

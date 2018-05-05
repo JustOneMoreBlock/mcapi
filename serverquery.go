@@ -106,14 +106,36 @@ func updateQuery(serverAddr string) *types.ServerQuery {
 	return status
 }
 
-func getQueryFromCacheOrUpdate(serverAddr string) *types.ServerQuery {
+func getQueryFromCacheOrUpdate(serverAddr string, c *gin.Context) *types.ServerQuery {
 	serverAddr = strings.ToLower(serverAddr)
 
 	if status, ok := queryMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerQuery)
 	}
 
-	return updateQuery(serverAddr)
+	ip := c.GetHeader("CF-Connecting-IP")
+
+	log.Printf("New server %s from %s\n", serverAddr, ip)
+
+	if limit, count := shouldRateLimit(ip); limit {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, struct{
+			Error string `json:"error"`
+			TryAfter int `json:"try_after"`
+		}{
+			Error: "too many invalid requests",
+			TryAfter: count / rateLimitThreshold,
+		})
+
+		return nil
+	}
+
+	query := updateQuery(serverAddr)
+
+	if query.Error != "" {
+		incrRateLimit(ip)
+	}
+
+	return query
 }
 
 func respondServerQuery(c *gin.Context) {
@@ -139,5 +161,11 @@ func respondServerQuery(c *gin.Context) {
 		serverAddr = ip + ":" + port
 	}
 
-	c.JSON(http.StatusOK, getQueryFromCacheOrUpdate(serverAddr))
+	resp := getQueryFromCacheOrUpdate(serverAddr, c)
+
+	if resp == nil {
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

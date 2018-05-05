@@ -155,16 +155,38 @@ func updatePing(serverAddr string) *types.ServerStatus {
 	return status
 }
 
-func getStatusFromCacheOrUpdate(serverAddr string, c *gin.Context) *types.ServerStatus {
+func getStatusFromCacheOrUpdate(serverAddr string, c *gin.Context, hideError bool) *types.ServerStatus {
 	serverAddr = strings.ToLower(serverAddr)
 
 	if status, ok := pingMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerStatus)
 	}
 
-	log.Printf("New server %s from %s\n", serverAddr, c.GetHeader("CF-Connecting-Ip"))
+	ip := c.GetHeader("CF-Connecting-IP")
 
-	return updatePing(serverAddr)
+	log.Printf("New server %s from %s\n", serverAddr, ip)
+
+	if limit, count := shouldRateLimit(ip); limit {
+		if !hideError {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, struct {
+				Error    string `json:"error"`
+				TryAfter int    `json:"try_after"`
+			}{
+				Error:    "too many invalid requests",
+				TryAfter: count / rateLimitThreshold,
+			})
+		}
+
+		return nil
+	}
+
+	status := updatePing(serverAddr)
+
+	if status.Error != "" {
+		incrRateLimit(ip)
+	}
+
+	return status
 }
 
 func respondServerStatus(c *gin.Context) {
@@ -190,5 +212,11 @@ func respondServerStatus(c *gin.Context) {
 		serverAddr = ip + ":" + port
 	}
 
-	c.JSON(http.StatusOK, getStatusFromCacheOrUpdate(serverAddr, c))
+	status := getStatusFromCacheOrUpdate(serverAddr, c, false)
+
+	if status == nil {
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
 }
