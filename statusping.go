@@ -13,21 +13,6 @@ import (
 	"github.com/syfaro/minepong"
 )
 
-func updatePingTimeout(serverAddr string) *types.ServerStatus {
-	done := make(chan *types.ServerStatus)
-
-	go func() {
-		done <- updatePing(serverAddr)
-	}()
-
-	select {
-	case resp := <-done:
-		return resp
-	case <-time.After(time.Duration(time.Second * 5)):
-		return nil
-	}
-}
-
 func updatePing(serverAddr string) *types.ServerStatus {
 	log.Printf("Pinging %s\n", serverAddr)
 

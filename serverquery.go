@@ -12,21 +12,6 @@ import (
 	"github.com/syfaro/mcapi/types"
 )
 
-func updateQueryTimeout(serverAddr string) *types.ServerQuery {
-	done := make(chan *types.ServerQuery)
-
-	go func() {
-		done <- updateQuery(serverAddr)
-	}()
-
-	select {
-	case resp := <-done:
-		return resp
-	case <-time.After(time.Duration(time.Second * 5)):
-		return nil
-	}
-}
-
 func updateQuery(serverAddr string) *types.ServerQuery {
 	log.Printf("Querying %s\n", serverAddr)
 
