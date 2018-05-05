@@ -170,12 +170,14 @@ func updatePing(serverAddr string) *types.ServerStatus {
 	return status
 }
 
-func getStatusFromCacheOrUpdate(serverAddr string) *types.ServerStatus {
+func getStatusFromCacheOrUpdate(serverAddr string, c *gin.Context) *types.ServerStatus {
 	serverAddr = strings.ToLower(serverAddr)
 
 	if status, ok := pingMap.GetOK(serverAddr); ok {
 		return status.(*types.ServerStatus)
 	}
+
+	log.Printf("New server %s from %s\n", serverAddr, c.GetHeader("CF-Connecting-Ip"))
 
 	return updatePing(serverAddr)
 }
@@ -203,5 +205,5 @@ func respondServerStatus(c *gin.Context) {
 		serverAddr = ip + ":" + port
 	}
 
-	c.JSON(http.StatusOK, getStatusFromCacheOrUpdate(serverAddr))
+	c.JSON(http.StatusOK, getStatusFromCacheOrUpdate(serverAddr, c))
 }

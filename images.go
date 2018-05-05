@@ -46,7 +46,7 @@ func respondServerImage(c *gin.Context) {
 		serverDisp = title
 	}
 
-	status := getStatusFromCacheOrUpdate(serverAddr)
+	status := getStatusFromCacheOrUpdate(serverAddr, c)
 
 	var imgToDraw image.Image
 
