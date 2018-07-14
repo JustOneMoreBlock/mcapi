@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/OneOfOne/cmap/stringcmap"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 	"github.com/getsentry/raven-go"
 	"github.com/gin-contrib/sentry"
 	"github.com/gin-gonic/gin"
